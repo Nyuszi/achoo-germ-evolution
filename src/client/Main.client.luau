@@ -60,7 +60,29 @@ Remotes.DishFx.OnClientEvent:Connect(Fx.event)
 Remotes.Notify.OnClientEvent:Connect(Hud.notify)
 Remotes.Announce.OnClientEvent:Connect(Hud.announce)
 Remotes.Feed.OnClientEvent:Connect(Hud.feed)
-Remotes.Profile.OnClientEvent:Connect(Menus.setProfile)
+local tipsShown = false
+Remotes.Profile.OnClientEvent:Connect(function(profile)
+	Menus.setProfile(profile)
+	-- first-time tips
+	if not tipsShown and profile.Sneezes == 0 and profile.BestSize < 60 then
+		tipsShown = true
+		local touch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+		local tips = {
+			touch and "👆 Hold your finger where you want to swim" or "🖱️ Your germ swims toward the mouse (or use WASD)",
+			"🍬 Eat the glowing food and germs smaller than you to grow",
+			"⚠️ Germs 25% bigger than you can swallow you!",
+			touch and "💨 DASH to escape, SPLIT to catch prey" or "💨 Shift = dash, Space = split",
+			"🤧 Grow to the sneeze size and touch the Sneeze Nerve in the middle!",
+		}
+		task.spawn(function()
+			task.wait(4)
+			for _, tip in tips do
+				Hud.announce(tip)
+				task.wait(5)
+			end
+		end)
+	end
+end)
 Remotes.Sneeze.OnClientEvent:Connect(Hud.sneeze)
 Remotes.Died.OnClientEvent:Connect(function(eaterName, seconds, canRevive, backToFloor)
 	alive = false

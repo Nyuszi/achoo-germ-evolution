@@ -119,6 +119,9 @@ local services = {
 }
 game = { GetService = function(_, n) return services[n] or Inst.new(n) end }
 workspace = Inst.new("Workspace")
+workspace.CurrentCamera = Inst.new("Camera")
+workspace.CurrentCamera.ViewportSize = { X = 800, Y = 400 }
+workspace.CurrentCamera.GetPropertyChangedSignal = function() return signal() end
 workspace.BulkMoveTo = function(_, parts, cfs) assert(#parts == #cfs, "bulk mismatch") BULK = #parts end
 task = { spawn = function(f, ...) f(...) end, delay = noop, wait = noop }
 -- buffer

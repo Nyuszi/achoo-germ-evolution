@@ -20,7 +20,26 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = player:WaitForChild("PlayerGui")
-Ui.gui = gui
+Ui.screen = gui
+
+-- Everything sits in one root frame that is scaled down on small screens (phones), so the
+-- layout made for a 1100x620 screen fits everywhere.
+local root = Instance.new("Frame")
+root.Name = "Root"
+root.BackgroundTransparency = 1
+root.Size = UDim2.fromScale(1, 1)
+root.Parent = gui
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = root
+local function fit()
+	local view = workspace.CurrentCamera.ViewportSize
+	local s = math.clamp(math.min(view.X / 1100, view.Y / 620), 0.5, 1)
+	uiScale.Scale = s
+	root.Size = UDim2.fromScale(1 / s, 1 / s)
+end
+fit()
+workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fit)
+Ui.gui = root
 
 function Ui.make(class, props, children)
 	local o = Instance.new(class)
