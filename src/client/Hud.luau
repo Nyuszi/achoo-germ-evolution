@@ -40,8 +40,9 @@ for i = 1, 6 do
 end
 
 -- toasts, banner, kill feed
-local toast = text({ Size = UDim2.new(0, 520, 0, 34), Position = UDim2.new(0.5, -260, 0, 106), Text = "", TextTransparency = 1, Parent = gui })
-local banner = text({ Size = UDim2.new(0, 640, 0, 44), Position = UDim2.new(0.5, -320, 0.26, 0), Text = "", TextTransparency = 1, TextColor3 = Color3.fromRGB(255, 230, 120), Parent = gui })
+-- ZIndex 15 keeps messages above an open menu (menus are 10-13), so "Jaws is now level 1!" isn't hidden
+local toast = text({ Size = UDim2.new(0, 520, 0, 34), Position = UDim2.new(0.5, -260, 0, 106), Text = "", TextTransparency = 1, ZIndex = 15, Parent = gui })
+local banner = text({ Size = UDim2.new(0, 640, 0, 44), Position = UDim2.new(0.5, -320, 0.26, 0), Text = "", TextTransparency = 1, TextColor3 = Color3.fromRGB(255, 230, 120), ZIndex = 15, Parent = gui })
 local feedFrame = make("Frame", { Size = UDim2.new(0, 300, 0, 120), Position = UDim2.new(1, -310, 0, 352), BackgroundTransparency = 1, Parent = gui }, {
 	make("UIListLayout", { VerticalAlignment = Enum.VerticalAlignment.Top, Padding = UDim.new(0, 2) }),
 })

@@ -103,7 +103,7 @@ function Ui.panel(name, title)
 		Size = UDim2.new(0.9, 0, 0.78, 0),
 		Position = UDim2.new(0.05, 0, 0.12, 0),
 		BackgroundColor3 = Ui.PANEL,
-		BackgroundTransparency = 0.05,
+		BackgroundTransparency = 0, -- fully solid, or the boss bar and germs show through the menu
 		Visible = false,
 		ZIndex = 10,
 		Parent = gui,

@@ -1132,6 +1132,20 @@ local function moveCell(cell, dt)
 	if math.abs(allowed - dist) > 0.001 then
 		if dist < 0.001 then
 			cell.x, cell.z = allowed, 0
+		elseif (allowed > dist or cell.vx ~= 0 or cell.vz ~= 0) and allowed > 0.001 and math.abs(allowed - dist) < cell.r + 15 then
+			-- just crossed into an inner zone it may not enter yet, or flung by a split or Chomp
+			-- lunge: stop hard at the boundary. The soft push below let a germ swimming or dashing
+			-- at a gate sit well inside the zone (by about speed / 10). Big gaps (a germ that shrank
+			-- deep inside a zone, or a wall closing in) keep the soft push so nothing teleports.
+			local k = allowed / dist
+			cell.x *= k
+			cell.z *= k
+			local nx, nz = cell.x / allowed, cell.z / allowed
+			local into = cell.vx * nx + cell.vz * nz
+			if (allowed > dist and into < 0) or (allowed < dist and into > 0) then
+				cell.vx -= into * nx
+				cell.vz -= into * nz
+			end
 		else
 			local k = (dist + (allowed - dist) * math.min(1, dt * 10)) / dist
 			cell.x *= k
