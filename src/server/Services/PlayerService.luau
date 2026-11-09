@@ -456,7 +456,18 @@ local function onAction(player, action)
 			Bus.fire("Dash", player)
 		end
 	elseif action == "Split" then
-		World.split(germ)
+		if not World.split(germ) and germ.alive and germ.dish then
+			-- tell new players why Space did nothing (each half needs MinSize)
+			local need = Config.Split.MinSize * germ.dish.scale
+			local biggest = 0
+			for _, cell in germ.cells do
+				biggest = math.max(biggest, cell.size)
+			end
+			if biggest < need and (germ.splitHintAt or 0) < World.now() then
+				germ.splitHintAt = World.now() + 3
+				Net.notify(player, "✂️ Grow to size " .. Formulas.formatNumber(math.ceil(need)) .. " to split", "info")
+			end
+		end
 	elseif action == "Front" or action == "Special" then
 		World.ability(germ, action)
 	elseif action == "Revive" then

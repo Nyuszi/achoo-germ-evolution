@@ -583,12 +583,12 @@ local function refreshQuests()
 		heading(quests.list, nextN(), "Weekly")
 		local w = profile.Quests.Weekly or 0
 		row(quests.list, nextN(), "Finish " .. Config.WeeklySteps .. " daily quests this week", w .. " / " .. Config.WeeklySteps .. "  ·  +500 DNA and a card", {
-			{ profile.Quests.WeeklyClaimed and "Claimed" or "Claim", (w >= Config.WeeklySteps and not profile.Quests.WeeklyClaimed) and Ui.GOOD or Ui.GREY, function()
+			{ profile.Quests.WeeklyClaimed and "Claimed" or (w >= Config.WeeklySteps and "Claim" or "..."), (w >= Config.WeeklySteps and not profile.Quests.WeeklyClaimed) and Ui.GOOD or Ui.GREY, function()
 				call("Quests", "ClaimWeekly")
 			end },
 		})
 		heading(quests.list, nextN(), "Codes")
-		local box = make("TextBox", { Size = UDim2.new(1, -10, 0, 44), Text = "", PlaceholderText = "Type a code (try ACHOO)", Font = Ui.FONT, TextScaled = true, BackgroundColor3 = Color3.fromRGB(240, 235, 250), TextColor3 = Color3.fromRGB(40, 25, 50), LayoutOrder = nextN(), ZIndex = 12, ClearTextOnFocus = false, Parent = quests.list }, { Ui.corner(10) })
+		local box = make("TextBox", { Size = UDim2.new(1, -10, 0, 44), Text = "", PlaceholderText = "Type a code (try ACHOO)", Font = Ui.FONT, TextSize = 22, BackgroundColor3 = Color3.fromRGB(240, 235, 250), TextColor3 = Color3.fromRGB(40, 25, 50), LayoutOrder = nextN(), ZIndex = 12, ClearTextOnFocus = false, Parent = quests.list }, { Ui.corner(10) })
 		button({ Size = UDim2.new(1, -10, 0, 44), Text = "Redeem", BackgroundColor3 = Ui.GOOD, LayoutOrder = nextN(), ZIndex = 12, Parent = quests.list }, function()
 			call("Quests", "Redeem", box.Text)
 		end)
@@ -611,7 +611,7 @@ local function refreshQuests()
 			for _, name in names do
 				row(quests.list, nextN(), (profile.Cards[name] and "🃏 " or "❔ ") .. name, profile.Cards[name] and "collected" or "not found yet", {})
 			end
-			row(quests.list, nextN(), "Claim set reward", reward, { { profile.CardSetsClaimed[set] and "Claimed" or "Claim", (have == #names and not profile.CardSetsClaimed[set]) and Ui.GOOD or Ui.GREY, function()
+			row(quests.list, nextN(), "Claim set reward", reward, { { profile.CardSetsClaimed[set] and "Claimed" or (have == #names and "Claim" or (have .. "/" .. #names)), (have == #names and not profile.CardSetsClaimed[set]) and Ui.GOOD or Ui.GREY, function()
 				call("Quests", "ClaimSet", set)
 			end } })
 		end
