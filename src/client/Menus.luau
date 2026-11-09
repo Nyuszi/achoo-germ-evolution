@@ -10,6 +10,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Formulas = require(ReplicatedStorage.Shared.Formulas)
 local Flags = require(ReplicatedStorage.Shared.Flags)
 local Ui = require(script.Parent.Ui)
+local Looks = require(script.Parent.Looks)
 
 local Menus = {}
 
@@ -264,6 +265,35 @@ local function ownsSkin(cat, id)
 	return false
 end
 
+-- A little germ drawn like in the game: a disc of the body colour with the face, pattern and hat
+-- (Looks) on top. With a flag, the disc is the flag. size = the disc's width in pixels.
+local function germPicture(parent, size, skin, pos)
+	local c = skin.Color or { 120, 220, 120 }
+	local color = Color3.fromRGB(c[1], c[2], c[3])
+	local flag = skin.Flag ~= nil and skin.Flag ~= ""
+	local disc = make(flag and "CanvasGroup" or "Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundColor3 = color, ZIndex = 1, Parent = parent }, { Ui.corner(size / 2) })
+	if flag then
+		text({ Size = UDim2.fromScale(2.1, 2.1), Position = UDim2.fromScale(-0.55, -0.55), Text = Flags.emoji(skin.Flag), Parent = disc })
+		disc = make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundTransparency = 1, ZIndex = 2, Parent = parent }, { Ui.corner(size / 2) })
+	end
+	-- a soft outline, like the body's rim in the game
+	make("UIStroke", { Thickness = math.max(1, size / 30), Color = color:Lerp(Color3.new(0, 0, 0), 0.45), Transparency = 0.2, Parent = disc })
+	Looks.build(disc, { skin = skin, color = color, flag = flag })
+	return disc
+end
+
+-- The player's look with one item swapped in
+local function withItem(cat, id)
+	local skin = table.clone(profile.Skin)
+	skin[cat] = id
+	if cat ~= "Flag" then
+		skin.Flag = ""
+	end
+	return skin
+end
+
+local LOOK_TABS = { Body = true, Pattern = true, Eyes = true, Mouth = true, Hat = true, Flag = true, Colors = true, Outfits = true }
+
 local function refreshEditor()
 	if not profile then
 		return
@@ -275,6 +305,13 @@ local function refreshEditor()
 	local function nextN()
 		n += 1
 		return n
+	end
+	if LOOK_TABS[tab] then
+		-- your germ as it looks right now
+		local top = make("Frame", { Size = UDim2.new(1, -10, 0, 128), BackgroundColor3 = Ui.ROW, LayoutOrder = nextN(), ZIndex = 12, Parent = editor.list }, { Ui.corner(10) })
+		germPicture(top, 86, profile.Skin, UDim2.new(0, 66, 0.56, 0))
+		text({ Size = UDim2.new(1, -150, 0, 30), Position = UDim2.new(0, 135, 0, 20), Text = "Your germ", ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = top })
+		text({ Size = UDim2.new(1, -150, 0, 44), Position = UDim2.new(0, 135, 0, 56), Text = "Seen from above, like in the game. Eyes follow where you swim.", TextWrapped = true, TextScaled = true, ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(215, 205, 230), Parent = top })
 	end
 	if tab == "Colors" then
 		for _, which in { "Color", "Color2" } do
@@ -387,7 +424,16 @@ local function refreshEditor()
 					end })
 				end
 			end
-			row(editor.list, nextN(), item.Name .. (on and "  ✓" or ""), info, buttons)
+			local swatch = nil
+			if cat == "Pattern" or cat == "Eyes" or cat == "Mouth" or cat == "Hat" or cat == "Body" then
+				local skin = withItem(cat, item.Id)
+				swatch = function(box)
+					-- hats stick out above the head, so those germs sit a bit lower and smaller
+					local hat = skin.Hat ~= nil and skin.Hat ~= "None"
+					germPicture(box, hat and 32 or 40, skin, UDim2.fromScale(0.5, hat and 0.62 or 0.5))
+				end
+			end
+			row(editor.list, nextN(), item.Name .. (on and "  ✓" or ""), info, buttons, swatch)
 		end
 	end
 end

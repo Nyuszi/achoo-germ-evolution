@@ -1,10 +1,13 @@
-// Pictures of every skin, bundle and flag, drawn from above like the game camera sees them
-// (same parts as src/client/Renderer.luau; Roblox materials are only imitated).
+// Pictures of every skin, bundle and flag, drawn from above like the game camera sees them.
+// The face, pattern and hat are the game's own 2D art (src/client/Looks.luau, built through
+// tools/look-trees.js); the 3D body imitates src/client/Renderer.luau (materials only roughly).
 // Usage: NODE_PATH=$(npm root -g) node tools/render-looks.js <out-dir>
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 const germDraw = require("./germ-draw");
+const guiDraw = require("./gui-draw");
+const lookTrees = require("./look-trees");
 
 const out = path.resolve(process.argv[2] || "look-previews");
 fs.mkdirSync(out, { recursive: true });
@@ -43,6 +46,20 @@ sheets.push({ file: "skins-2-mouth-hat-trail", title: "Germ Editor: mouths, hats
   section("Hat", skins("Hat").map((s) => cell(s.name, look({ Hat: s.id }), priceText(s)))),
   section("Trail", skins("Trail").filter((s) => s.id !== "None").map((s) => cell(s.name, look({ Trail: s.id }), priceText(s)))),
 ] });
+// a few looking around and blinking, to show the eyes follow the swim direction
+const COLS = [[120, 220, 120], [110, 200, 255], [255, 150, 200], [255, 210, 90], [190, 140, 255], [255, 140, 100]];
+sheets.unshift({ file: "skins-0-closeups", title: "Germ looks up close", big: true, sections: [
+  section("Faces (pupils follow where you swim, and they blink)", [
+    cell("Big Cute, looking left", Object.assign(look({ Eyes: "Cute" }, COLS[1]), { aim: [-1, 0] }), ""),
+    cell("Angry + Fangs", Object.assign(look({ Eyes: "Angry", Mouth: "Fangs" }, COLS[5]), { aim: [0, 1] }), ""),
+    cell("Cat Eyes + Kitty", look({ Eyes: "Cat", Mouth: "Kitty", Hat: "CatEars" }, COLS[3]), ""),
+    cell("Blinking", Object.assign(look({ Eyes: "Cute", Mouth: "Tongue" }, COLS[2]), { blink: true }), ""),
+    cell("Heart Eyes", look({ Eyes: "Heart", Mouth: "Smile", Hat: "Bow" }, COLS[2]), ""),
+    cell("Googly + Braces", look({ Eyes: "Googly", Mouth: "Braces", Pattern: "Checkers", Color2: [255, 255, 255] }, COLS[4]), ""),
+    cell("Sleepy + Mustache", look({ Eyes: "Sleepy", Mouth: "Mustache", Hat: "TopHat" }, COLS[0]), ""),
+    cell("Wink + Crown", look({ Eyes: "Wink", Mouth: "Tongue", Hat: "Crown", Pattern: "Hearts", Color2: [255, 90, 150] }, COLS[3]), ""),
+  ]),
+] });
 sheets.push({ file: "skins-3-bundles-colours", title: "Bundles and colours", sections: [
   section("Bundles (whole outfits)", bundles.map((b) => cell(b.name, look(b.items, b.id === "DragonGerm" ? [200, 60, 40] : b.id === "SpaceGerm" ? [110, 70, 220] : [255, 150, 200]), b.price + " R$"))),
   section("Colours are free: any colour, plus a 2nd colour for patterns", [[120, 220, 120], [110, 200, 255], [255, 150, 200], [255, 210, 90], [190, 140, 255], [255, 140, 100], [60, 60, 70], [255, 255, 255]].map((c, i) =>
@@ -58,29 +75,35 @@ const conts = { Africa: "Africa", Asia: "Asia", Europe: "Europe", NorthAmerica: 
 sheets.push({ file: "flags-2-all-195", title: "All " + flagList.length + " flags", compact: true, sections: Object.keys(conts).map((k) =>
   section(conts[k], flagList.filter((f) => f.cont === k).map((f) => cell(f.name, look({ Eyes: "Cute", Mouth: "None" }, GREEN, emoji(f.code)), "")))) });
 
-const html = (sheet) => `<!doctype html><html><head><meta charset="utf-8">
+const html = (sheet, trees) => `<!doctype html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=block" rel="stylesheet">
 <style>body{margin:0;background:#2a1838;font-family:Fredoka,sans-serif;color:#fff;width:1400px}
 h1{margin:0;padding:22px 30px 6px;font-size:34px} .note{padding:0 30px;color:#d9c8ef;font-size:16px}
 h2{margin:18px 30px 8px;font-size:22px;color:#ffd978} .grid{display:flex;flex-wrap:wrap;gap:12px;padding:0 30px}
-.c{width:${sheet.compact ? 82 : 150}px;background:#3e2a4e;border-radius:14px;padding:${sheet.compact ? 4 : 8}px;text-align:center}
-.c canvas{display:block;margin:0 auto} .n{font-size:${sheet.compact ? 11 : 16}px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c{width:${sheet.compact ? 82 : sheet.big ? 300 : 150}px;background:#3e2a4e;border-radius:14px;padding:${sheet.compact ? 4 : 8}px;text-align:center}
+.c canvas{display:block} .st{position:relative;margin:0 auto} .c>.n{font-size:${sheet.compact ? 11 : 16}px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .p{font-size:13px;color:#ffd978;min-height:16px}</style></head><body>
-<h1>${sheet.title}</h1><div class="note">Drawn from above like the game camera, with the same parts as the game code. Roblox lighting and materials look a bit different in the real game.</div>
+<h1>${sheet.title}</h1><div class="note">Drawn from above like the game camera. The face, pattern and hat are the game's own art; Roblox lighting and body materials look a bit different in the real game.</div>
 <div id="root"></div><script>${germDraw}
-const S = ${JSON.stringify(sheet)};
+${guiDraw}
+const S = ${JSON.stringify(sheet)}, TREES = ${JSON.stringify(trees)};
 const root = document.getElementById("root");
 for (const sec of S.sections) {
   const h = document.createElement("h2"); h.textContent = sec.name; root.appendChild(h);
   const grid = document.createElement("div"); grid.className = "grid"; root.appendChild(grid);
   for (const it of sec.items) {
     const d = document.createElement("div"); d.className = "c";
-    const size = S.compact ? 74 : 134;
+    const size = S.compact ? 74 : S.big ? 284 : 134;
+    const st = document.createElement("div"); st.className = "st"; st.style.width = size + "px"; st.style.height = size + "px";
     const cv = document.createElement("canvas"); cv.width = size * 2; cv.height = size * 2; cv.style.width = size + "px"; cv.style.height = size + "px";
     const g = cv.getContext("2d"); g.scale(2, 2);
     const hasTrail = it.look.skin.Trail && it.look.skin.Trail !== "None";
-    drawGerm(g, size / 2, hasTrail ? size * 0.36 : size / 2 + (it.look.skin.Hat !== "None" ? 4 : 0), size * (S.compact ? 0.38 : 0.31), it.look, 0.3);
-    d.appendChild(cv);
+    const hatted = it.look.skin.Hat && it.look.skin.Hat !== "None";
+    const cx = size / 2, cy = hasTrail ? size * 0.36 : size / 2 + (hatted ? size * 0.08 : 0), r = size * (S.compact ? 0.38 : hatted ? 0.28 : 0.31);
+    drawGerm(g, cx, cy, r, it.look, 0.3);
+    st.appendChild(cv);
+    lookOverlay(st, cx, cy, r, TREES[it.tree]);
+    d.appendChild(st);
     const n = document.createElement("div"); n.className = "n"; n.textContent = it.title; d.appendChild(n);
     if (!S.compact) { const p = document.createElement("div"); p.className = "p"; p.textContent = it.price; d.appendChild(p); }
     grid.appendChild(d);
@@ -94,7 +117,10 @@ for (const sec of S.sections) {
     // a fresh page each time: the drawing code declares top-level constants
     const tab = await browser.newPage({ viewport: { width: 1400, height: 800 }, deviceScaleFactor: 2 });
     tab.on("pageerror", (e) => console.error("page error:", e.message));
-    await tab.setContent(html(sheet), { waitUntil: "networkidle" }).catch(() => {});
+    const items = sheet.sections.flatMap((sec) => sec.items);
+    const trees = lookTrees(items.map((it) => it.look));
+    items.forEach((it, i) => (it.tree = i));
+    await tab.setContent(html(sheet, trees), { waitUntil: "networkidle" }).catch(() => {});
     await tab.evaluate(() => document.fonts.ready);
     const file = path.join(out, sheet.file + ".png");
     await tab.screenshot({ path: file, fullPage: true });

@@ -1,7 +1,9 @@
-// Draws a germ from above in a <canvas>, using the same parts, sizes and offsets as
+// Draws a germ's 3D body from above in a <canvas>, using the same parts, sizes and offsets as
 // src/client/Renderer.luau (buildVisual). Shared by the picture tools. Roblox materials
-// (Glass, Neon, Lava...) are only imitated with simple paint.
-// Exports a string of browser JS defining drawGerm(g, x, y, r, look, t).
+// (Glass, Neon, Lava...) are only imitated with simple paint. The face, pattern and hat are the
+// real 2D art from src/client/Looks.luau (see tools/look-trees.js), laid on top with lookOverlay.
+// Exports a string of browser JS defining drawGerm(g, x, y, r, look, t) and
+// lookOverlay(parentEl, x, y, r, tree) (needs tools/gui-draw.js on the page too).
 module.exports = String.raw`
 const WHITE = [255,255,255], BLACK = [25,25,35];
 const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
@@ -14,28 +16,6 @@ function parts(look) {
   const skin = look.skin || {}, color = look.color, color2 = skin.Color2 || WHITE, muts = look.muts || {};
   const P = [];
   const ex = (shape, c, size, fwd, up, right, extra) => P.push(Object.assign({ shape, c, size, fwd, up, right }, extra || {}));
-  const eyes = skin.Eyes || "Cute";
-  let eyeK = 0.42, pupilK = 0.2;
-  if (eyes === "Googly") { eyeK = 0.55; pupilK = 0.18; } else if (eyes === "Sleepy") pupilK = 0.3;
-  if (eyes === "Cyclops") { ex("ball", WHITE, [0.6,0.6,0.6], 0.42, 0.75, 0); ex("ball", BLACK, [0.28,0.28,0.28], 0.55, 0.95, 0); }
-  else {
-    const list = eyes === "Three" ? [-0.4, 0, 0.4] : [-0.32, 0.32];
-    for (const s of list) { ex("ball", WHITE, [eyeK,eyeK,eyeK], 0.42, 0.75, s); ex("ball", BLACK, [pupilK,pupilK,pupilK], 0.52, 0.92, s); }
-    if (eyes === "Angry" || eyes === "Sleepy") for (const s of [-0.32, 0.32]) ex("block", lerp(color, BLACK, 0.5), [0.4,0.08,0.12], 0.45, 1.0, s, { tilt: eyes === "Angry" ? (s < 0 ? 0.35 : -0.35) : 0 });
-  }
-  const mouth = skin.Mouth || "Smile";
-  if (mouth === "Smile" || mouth === "Braces") ex("block", mouth === "Braces" ? [190,190,200] : BLACK, [0.4,0.06,0.1], 0.85, 0.35, 0);
-  else if (mouth === "Fangs") { ex("block", WHITE, [0.1,0.1,0.2], 0.9, 0.3, -0.12); ex("block", WHITE, [0.1,0.1,0.2], 0.9, 0.3, 0.12); }
-  else if (mouth === "Tongue") ex("ball", [255,120,150], [0.28,0.28,0.28], 0.95, 0.3, 0);
-  else if (mouth === "Mustache") ex("block", [70,45,30], [0.5,0.1,0.14], 0.85, 0.45, 0);
-  const pat = skin.Pattern || "None";
-  if (pat === "Spots" || pat === "Camo" || pat === "Checkers") {
-    const n = pat === "Spots" ? 5 : 7;
-    for (let i = 1; i <= n; i++) { const a = i / n * Math.PI * 2; let c = color2; if (pat === "Camo") c = lerp(color, [60,80,40], 0.5 + (i % 2) * 0.2);
-      ex(pat === "Checkers" ? "block" : "ball", c, [0.3,0.3,0.3], Math.cos(a) * 0.55, 0.7, Math.sin(a) * 0.55); }
-  } else if (pat === "Stripes") { [-0.75, -0.35, 0.05].forEach((at, i) => ex("block", color2, [i === 0 ? 1.1 : 1.6, 0.08, 0.2], at, 0.92, 0)); }
-  else if (pat === "Flames") { for (const i of [-2,-1,0,1,2]) { const long = 0.9 - Math.abs(i) * 0.15; ex("block", i % 2 === 0 ? [255,140,30] : [255,220,60], [0.18,0.08,long], -0.85 + long / 2, 0.9, i * 0.28, { neon: true }); } }
-  else if (pat === "Swirl") { for (let i = 1; i <= 9; i++) { const a = i * 0.9, d = 0.08 + i * 0.055, k = 0.12 + i * 0.01; ex("ball", color2, [k,k,k], -0.3 + Math.cos(a) * d, 0.95, Math.sin(a) * d); } }
   const has = (slot, id) => muts[slot] === id;
   const bone = [245,245,230];
   if (has("Front","Jaws")) { ex("block", bone, [0.25,0.3,0.55], 1.0, 0, -0.25); ex("block", bone, [0.25,0.3,0.55], 1.0, 0, 0.25); }
@@ -48,13 +28,6 @@ function parts(look) {
   if (has("Sides","Toxin")) for (let i = 1; i <= 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4; ex("ball", [150,255,80], [0.25,0.25,0.25], Math.cos(a) * 0.95, 0.2, Math.sin(a) * 0.95, { neon: true }); }
   if (has("Special","Magnet")) { ex("block", [230,60,60], [0.25,0.4,0.25], 0, 1.0, -0.2); ex("block", [60,90,230], [0.25,0.4,0.25], 0, 1.0, 0.2); }
   if (has("Special","Sneezer")) ex("ball", lerp(color, [255,120,120], 0.5), [0.3,0.3,0.3], 0.95, 0.55, 0);
-  const hat = skin.Hat || "None";
-  if (hat === "Crown") ex("crown", [255,205,50], [0.35,0.6,0.6], 0, 1.15, 0, { neon: true });
-  else if (hat === "Party") { ex("cone", [255,90,200], [0.35,0.6,0.35], 0, 1.2, 0); ex("ball", [255,240,90], [0.2,0.2,0.2], 0, 1.55, 0); }
-  else if (hat === "Propeller") { ex("ball", [80,160,255], [0.5,0.5,0.5], 0, 1.0, 0); ex("block", [255,80,80], [1.0,0.06,0.15], 0, 1.28, 0, { rot: 0.6 }); }
-  else if (hat === "Halo") ex("ring", [255,250,180], [0.08,1.0,1.0], 0, 1.5, 0, { neon: true });
-  else if (hat === "Horns") { ex("cone", [200,40,40], [0.15,0.45,0.15], 0.2, 1.0, -0.35, { big: 1.6 }); ex("cone", [200,40,40], [0.15,0.45,0.15], 0.2, 1.0, 0.35, { big: 1.6 }); }
-  else if (hat === "Laurel") ex("ring", [90,200,90], [0.12,1.1,1.1], 0, 1.0, 0, { leaves: true });
   return P;
 }
 function paintBody(g, x, y, r, look) {
@@ -80,8 +53,6 @@ function paintBody(g, x, y, r, look) {
     if (mat === "DiamondPlate") { g.strokeStyle = "rgba(255,255,255,0.35)"; g.lineWidth = r * 0.03; for (let i = -6; i <= 6; i++) for (let k = -6; k <= 6; k++) { const px = x + i * r * 0.18, py = y + k * r * 0.18 + (i % 2) * r * 0.09; g.beginPath(); g.moveTo(px - r * 0.04, py - r * 0.04); g.lineTo(px + r * 0.04, py + r * 0.04); g.stroke(); } }
     if (skin.Body === "Crystal") { g.strokeStyle = "rgba(255,255,255,0.6)"; g.lineWidth = r * 0.03; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); g.stroke(); } }
     if (skin.Body === "Candy") { g.strokeStyle = "rgba(255,255,255,0.55)"; g.lineWidth = r * 0.14; for (let i = -4; i <= 4; i++) { g.beginPath(); g.moveTo(x + i * r * 0.45 - r, y - r); g.lineTo(x + i * r * 0.45 + r, y + r); g.stroke(); } }
-    // shine
-    g.fillStyle = "rgba(255,255,255," + (mat === "Fabric" ? 0.08 : 0.3) + ")"; g.beginPath(); g.ellipse(x - r * 0.38, y - r * 0.42, r * 0.28, r * 0.16, -0.6, 0, Math.PI * 2); g.fill();
   }
   g.restore();
   g.lineWidth = Math.max(1.5, r * 0.04); g.strokeStyle = css(lerp(color, BLACK, 0.45), 0.8); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
@@ -128,5 +99,17 @@ function drawGerm(g, x, y, r, look, t) {
   under.forEach(drawPart);
   paintBody(g, x, y, r, look);
   over.forEach(drawPart);
+}
+function lookOverlay(parentEl, x, y, r, tree) {
+  if (!document.getElementById("look-css")) {
+    const st = document.createElement("style"); st.id = "look-css";
+    st.textContent = ".look{position:absolute}.look .n{position:absolute;box-sizing:border-box;overflow:visible!important}.look .t{display:flex;align-items:center;white-space:nowrap;font-family:Fredoka,sans-serif}";
+    document.head.appendChild(st);
+  }
+  const d = document.createElement("div"); d.className = "look";
+  Object.assign(d.style, { left: (x - r) + "px", top: (y - r) + "px", width: 2 * r + "px", height: 2 * r + "px" });
+  parentEl.appendChild(d);
+  draw(tree, d, 2 * r, 2 * r);
+  return d;
 }
 `;

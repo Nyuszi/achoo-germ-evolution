@@ -1,10 +1,34 @@
 // Lays out a dumped Roblox GUI tree (from tools/menu-dump.lua) as HTML, like Roblox would:
-// UDim2 sizes/positions, AnchorPoint, UIListLayout, UIGridLayout, UICorner, UIStroke, TextScaled.
+// UDim2 sizes/positions, AnchorPoint, Rotation, ZIndex (sibling order), UIListLayout, UIGridLayout,
+// UICorner, UIStroke, UIGradient (colour and transparency keypoints), TextScaled.
 // Exports browser JS defining draw(o, parentEl, parentW, parentH, pos).
 module.exports = String.raw`
 const rgb = (c) => c ? "rgb(" + c.map((x) => Math.round(x * 255)).join(",") + ")" : null;
 const kid = (o, cls) => o.children.find((c) => c.class === cls);
-const GUI = ["Frame", "TextLabel", "TextButton", "TextBox", "ScrollingFrame", "ImageLabel", "ImageButton"];
+// a sequence ({ seq, kp: [[t, ...value]] }) at time t
+function seqAt(q, t) {
+  const kp = q.kp;
+  if (t <= kp[0][0]) return kp[0].slice(1);
+  for (let i = 1; i < kp.length; i++) if (t <= kp[i][0]) {
+    const a = kp[i - 1], b = kp[i], k = (t - a[0]) / Math.max(1e-9, b[0] - a[0]);
+    return a.slice(1).map((v, j) => v + (b[j + 1] - v) * k);
+  }
+  return kp[kp.length - 1].slice(1);
+}
+// CSS background for a UIGradient on a frame of colour c (0..1) and transparency bt
+function gradient(g, c, bt) {
+  const times = new Set([0, 1]);
+  if (g.Color && g.Color.kp) g.Color.kp.forEach((k) => times.add(k[0]));
+  if (g.Transparency && g.Transparency.kp) g.Transparency.kp.forEach((k) => times.add(k[0]));
+  const stops = [...times].sort((a, b) => a - b).map((t) => {
+    const m = g.Color && g.Color.kp ? seqAt(g.Color, t) : [1, 1, 1];
+    const tr = g.Transparency && g.Transparency.kp ? seqAt(g.Transparency, t)[0] : 0;
+    const a = (1 - bt) * (1 - tr);
+    return "rgba(" + c.map((x, i) => Math.round(x * m[i] * 255)).join(",") + "," + a.toFixed(3) + ") " + (t * 100).toFixed(2) + "%";
+  });
+  return "linear-gradient(" + (90 + (g.Rotation || 0)) + "deg," + stops.join(",") + ")";
+}
+const GUI = ["Frame", "CanvasGroup", "TextLabel", "TextButton", "TextBox", "ScrollingFrame", "ImageLabel", "ImageButton"];
 function draw(o, parentEl, pw, ph, pos) {
   if (o.Visible === false || !GUI.includes(o.class)) return null;
   const s = o.Size || [0, 100, 0, 100];
@@ -20,19 +44,31 @@ function draw(o, parentEl, pw, ph, pos) {
   el.className = "n";
   Object.assign(el.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
   const transparent = o.BackgroundTransparency === 1 || (o.class === "ScrollingFrame" && o.BackgroundTransparency === undefined);
-  if (!transparent) {
+  const grad = kid(o, "UIGradient");
+  if (!transparent && grad) el.style.background = gradient(grad, o.BackgroundColor3 || [0.64, 0.64, 0.65], o.BackgroundTransparency || 0);
+  else if (!transparent) {
     el.style.background = rgb(o.BackgroundColor3) || "rgb(163,162,165)";
     if (o.BackgroundTransparency) el.style.background = el.style.background.replace("rgb", "rgba").replace(")", "," + (1 - o.BackgroundTransparency) + ")");
   }
+  // like Roblox, only scrolling frames, canvas groups and ClipsDescendants clip their children
+  el.style.overflow = o.class === "ScrollingFrame" || o.class === "CanvasGroup" || o.ClipsDescendants ? "hidden" : "visible";
+  if (o.Rotation) el.style.transform = "rotate(" + o.Rotation + "deg)";
+  el.style.zIndex = o.ZIndex == null ? 1 : o.ZIndex;
   const corner = kid(o, "UICorner");
   if (corner) { const r = corner.CornerRadius || { s: 0, o: 8 }; el.style.borderRadius = (r.s * Math.min(w, h) + r.o) + "px"; }
   const isText = o.class === "TextLabel" || o.class === "TextButton" || o.class === "TextBox";
-  if (kid(o, "UIStroke") && !isText) el.style.border = "3px solid rgb(20,10,30)";
+  const stroke = kid(o, "UIStroke");
+  if (stroke && !isText) {
+    // Roblox draws a frame's stroke outside its edge
+    const sc = stroke.Color && !stroke.Color.seq ? stroke.Color : [0, 0, 0];
+    el.style.boxShadow = "0 0 0 " + (stroke.Thickness || 1) + "px rgba(" + sc.map((x) => Math.round(x * 255)).join(",") + "," + (1 - (stroke.Transparency || 0)) + ")";
+  }
   if (o.Name) el.dataset.name = o.Name;
   parentEl.appendChild(el);
   if (isText) {
     let txt = o.Text || "";
     let color = rgb(o.TextColor3) || "#fff";
+    if (o.TextTransparency) color = color.replace("rgb", "rgba").replace(")", "," + (1 - o.TextTransparency) + ")");
     if (!txt && o.PlaceholderText) { txt = o.PlaceholderText; color = "rgba(40,25,50,.5)"; }
     const t = document.createElement("div");
     t.className = "t";

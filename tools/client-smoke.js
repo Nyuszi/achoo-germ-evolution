@@ -54,13 +54,22 @@ CF.__mul = function(a, b) return setmetatable({}, CF) end
 CFrame = { new = function() return setmetatable({}, CF) end, lookAt = function() return setmetatable({}, CF) end, Angles = function() return setmetatable({}, CF) end }
 local C3 = {}
 C3.__index = C3
-function C3.Lerp(a, b, t) return a end
+function C3.Lerp(a, b, t) return setmetatable({ R = a.R + (b.R - a.R) * t, G = a.G + (b.G - a.G) * t, B = a.B + (b.B - a.B) * t }, C3) end
 local function c3(r, g, b) return setmetatable({ R = r, G = g, B = b }, C3) end
 Color3 = { new = c3, fromRGB = function(r, g, b) return c3(r / 255, g / 255, b / 255) end }
 UDim = { new = function(a, b) return { Scale = a, Offset = b } end }
 UDim2 = { new = function(a, b, c, d) return { a or 0, b or 0, c or 0, d or 0 } end, fromScale = function(a, b) return { a, 0, b, 0 } end, fromOffset = function(a, b) return { 0, a, 0, b } end }
-ColorSequence = { new = function() return {} end }
-NumberSequence = { new = function() return {} end }
+-- sequences keep their keypoints (the picture tools draw UIGradients from them)
+ColorSequenceKeypoint = { new = function(t, c) return { Time = t, Value = c } end }
+NumberSequenceKeypoint = { new = function(t, v) return { Time = t, Value = v } end }
+ColorSequence = { new = function(a, b)
+  if type(a) == "table" and a[1] then return { __seq = "color", Keypoints = a } end
+  return { __seq = "color", Keypoints = { { Time = 0, Value = a }, { Time = 1, Value = b or a } } }
+end }
+NumberSequence = { new = function(a, b)
+  if type(a) == "table" then return { __seq = "number", Keypoints = a } end
+  return { __seq = "number", Keypoints = { { Time = 0, Value = a }, { Time = 1, Value = b or a } } }
+end }
 TweenInfo = { new = function() return {} end }
 function typeof(v) if getmetatable(v) == C3 then return "Color3" end return type(v) end
 Enum = setmetatable({}, { __index = function(t, k) return setmetatable({}, { __index = function(_, v) return k .. "." .. v end }) end })
@@ -98,6 +107,7 @@ function Inst:GetChildren() return table.clone(self.__children) end
 function Inst:IsA(c) return self.__class == c or (c == "GuiObject" and self.__class ~= "UIListLayout" and self.__class ~= "UICorner" and self.__class ~= "UIStroke") or (c == "GuiButton" and self.__class == "TextButton") end
 function Inst:Destroy() self.Parent = nil end
 function Inst:FindFirstChildOfClass(c) for _, x in ipairs(self.__children) do if x.__class == c then return x end end return nil end
+function Inst:FindFirstChildWhichIsA(c) return self:FindFirstChildOfClass(c) end
 function Inst:FindFirstChild(n) for _, x in ipairs(self.__children) do if x.Name == n then return x end end return nil end
 function Inst:WaitForChild(n) return self:FindFirstChild(n) or Inst.new("Folder") end
 function Inst:SetAttribute(k, v) self.__attrs[k] = v end
@@ -156,8 +166,26 @@ local Renderer = require("Renderer")
 local Fx = require("Fx")
 local Hud = require("Hud")
 local Menus = require("Menus")
+local Looks = require("Looks")
+if LOOK_SHOTS then
+  __LOOK_DUMP__
+  return
+end
+-- every look item in the shop has art
+for cat, tbl in pairs({ Pattern = Looks.patterns, Eyes = Looks.eyes, Mouth = Looks.mouths, Hat = Looks.hats }) do
+  for _, item in ipairs(Config.Skins[cat]) do
+    assert(item.Id == "None" or tbl[item.Id], "no look art for " .. cat .. " " .. item.Id)
+  end
+end
+for _, e in ipairs({ "Cute", "Googly", "Sleepy", "Heart" }) do
+  local root = Instance.new("Frame")
+  local h = Looks.build(root, { skin = { Eyes = e, Hat = "Propeller", Pattern = "Leopard", Mouth = "Kitty", Color2 = { 1, 2, 3 } }, color = Color3.new(0.5, 0.5, 0.5) })
+  Looks.aim(h, 1, 0, 2) Looks.blink(h, true) Looks.blink(h, false)
+  assert(h.spin, "propeller spin frame")
+end
+print("looks ok")
 local info = { id = 7, kind = "host", host = 2, scale = 10, radius = 500, wall = 500, sneeze = 25000, cx = 2400, cz = 0, name = "Big Barkley", hazard = "x",
-  zones = { { name = "Snout", outer = 500 }, { name = "Drool Lake", outer = 350 } }, modifiers = { "Fog" } }
+  zones = { { name = "Snout", outer = 500 }, { name = "Drool Lake", outer = 360 }, { name = "Stomach", outer = 220 }, { name = "Brain", outer = 100 } }, outside = { 60, 40, 30 }, modifiers = { "Fog" } }
 Renderer.setDish(info)
 Fx.setDish(info)
 Hud = require("Hud")
@@ -236,7 +264,7 @@ print("hud ok")
 -- menus with a profile
 local profile = { Dna = 99999, Levels = { Jaws = 5, Suction = 5, Spikes = 2 }, Fusions = { BlackHole = true }, Equipped = { Front = "BlackHole", Sides = "Spikes" }, Loadouts = { { Front = "Jaws" } },
   Core = "Blob", MaxHost = 3, Host = 3, Skills = { Hunter = 2 }, GermPoints = 3,
-  Skin = { Body = "Jelly", Pattern = "None", Eyes = "Cute", Mouth = "Smile", Hat = "None", Trail = "None", SneezeFx = "Classic", Flag = "HU", Color = { 1, 2, 3 }, Color2 = { 4, 5, 6 } },
+  Skin = { Body = "Jelly", Pattern = "None", Eyes = "Cute", Mouth = "Smile", Hat = "None", Trail = "None", SneezeFx = "Classic", Flag = "HU", Color = { 110, 200, 255 }, Color2 = { 255, 255, 255 } },
   OwnedSkins = { ["Body:Lava"] = true }, Flags = { HU = true }, Outfits = { { Body = "Jelly", Pattern = "None", Hat = "None" } }, Passes = { ExtraLoadout = true }, Potions = 1, PotionUntil = 0,
   Quests = { Day = 1, List = { { Id = "EatGerms", Goal = 5, Progress = 5, Claimed = false }, { Id = "Grow", Goal = 3, Progress = 1, Claimed = false } }, Weekly = 7, WeeklyClaimed = false },
   Streak = { Day = 1, Count = 3 }, Cards = { Whitey = true }, CardSetsClaimed = {}, ArenaBest = 4, ArenaBestEver = 12, ArenaFloor = 10, Tokens = 50, Mutant = 1, Sneezes = 7, Kills = 3, BestSize = 9,
@@ -246,6 +274,8 @@ local profile = { Dna = 99999, Levels = { Jaws = 5, Suction = 5, Spikes = 2 }, F
 Menus.setProfile(profile)
 if MENU_SHOTS then
   state.mode = "host" state.nextGate = { name = "Sneeze", size = 25000 } state.size = 9000 state.quarantine = 0 state.protected = false state.actives = { Front = { id = "Chomp", readyIn = 0 }, Special = { id = "Blast", readyIn = 0 } } state.dashIn = 0 state.splitIn = 0 Hud.sync(state) Hud.tick(0.01) Hud.setStick(MENU_TOUCH == true)
+  local marks = { king = { x = 2400 + 230, z = -170 }, bosses = { { x = 2400 - 90, z = 300 } }, golden = { { x = 2400 + 140, z = 200 } } }
+  Hud.map(2400 - 160, 140, marks) Hud.map(2400 - 150, 130, marks)
   __MENU_DUMP__
   return
 end
@@ -270,11 +300,15 @@ print("CLIENT SMOKE OK")
 `;
 let code = (process.env.MENU_TOUCH ? "MENU_TOUCH = true\n" : "") + prelude;
 for (const n of ["Config", "Formulas", "Flags", "Names"]) code += wrap(n, read(`shared/${n}.luau`));
-for (const n of ["Ui", "Renderer", "Fx", "Hud", "Menus"]) code += wrap(n, read(`client/${n}.luau`));
-let runCode = run;
-if (process.env.MENU_DUMP) {
-  runCode = `MENU_SHOTS = ${process.env.MENU_DUMP}\n` + run.replace("__MENU_DUMP__", fs.readFileSync(path.join(__dirname, "menu-dump.lua"), "utf8"));
-} else runCode = run.replace("__MENU_DUMP__", "");
+for (const n of ["Ui", "Looks", "Renderer", "Fx", "Hud", "Menus"]) code += wrap(n, read(`client/${n}.luau`));
+const tool = (f) => fs.readFileSync(path.join(__dirname, f), "utf8");
+let runCode = run.replace("__MENU_DUMP__", process.env.MENU_DUMP ? tool("gui-json.lua") + tool("menu-dump.lua") : "")
+  .replace("__LOOK_DUMP__", process.env.LOOK_DUMP ? tool("gui-json.lua") + tool("look-dump.lua") : "");
+if (process.env.MENU_DUMP) runCode = `MENU_SHOTS = ${process.env.MENU_DUMP}\n` + runCode;
+// LOOK_DUMP = a JSON file: [{ skin = {...}, color = [r, g, b], flag = bool }]
+const luaLit = (v) => Array.isArray(v) ? "{" + v.map(luaLit).join(",") + "}" : v && typeof v === "object" ?
+  "{" + Object.entries(v).map(([k, x]) => `[${JSON.stringify(k)}]=${luaLit(x)}`).join(",") + "}" : JSON.stringify(v);
+if (process.env.LOOK_DUMP) runCode = `LOOK_SHOTS = ${luaLit(JSON.parse(fs.readFileSync(process.env.LOOK_DUMP, "utf8")))}\n` + runCode;
 code += runCode;
 if (process.env.SMOKE_CODE) fs.writeFileSync(process.env.SMOKE_CODE, code);
 const L = lauxlib.luaL_newstate();
@@ -282,4 +316,4 @@ lualib.luaL_openlibs(L);
 if (lauxlib.luaL_loadstring(L, to_luastring(code)) !== lua.LUA_OK) { console.error(lua.lua_tojsstring(L, -1)); process.exit(1); }
 lua.lua_getglobal(L, to_luastring("debug")); lua.lua_getfield(L, -1, to_luastring("traceback")); lua.lua_remove(L, -2); lua.lua_insert(L, 1);
 if (lua.lua_pcall(L, 0, 0, 1) !== lua.LUA_OK) { console.error(lua.lua_tojsstring(L, -1)); process.exit(1); }
-if (process.env.MENU_DUMP) { lua.lua_getglobal(L, to_luastring("MENU_JSON")); fs.writeFileSync(process.env.MENU_OUT, lua.lua_tojsstring(L, -1)); }
+if (process.env.MENU_DUMP || process.env.LOOK_DUMP) { lua.lua_getglobal(L, to_luastring("MENU_JSON")); fs.writeFileSync(process.env.MENU_OUT || process.env.LOOK_OUT, lua.lua_tojsstring(L, -1)); }

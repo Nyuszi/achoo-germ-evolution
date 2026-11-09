@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Formulas = require(ReplicatedStorage.Shared.Formulas)
 local Flags = require(ReplicatedStorage.Shared.Flags)
+local Looks = require(script.Parent.Looks)
 
 local Renderer = {}
 
@@ -116,6 +117,7 @@ end
 -- Germ looks ----------------------------------------------------------------------------------
 
 local WHITE, BLACK = Color3.new(1, 1, 1), Color3.fromRGB(25, 25, 35)
+local LOOK_PAD = 2 -- the look billboard is this much bigger than the body, so hats fit
 
 local function skinItem(cat, id)
 	for _, item in Config.Skins[cat] or {} do
@@ -159,7 +161,6 @@ local function buildVisual(cellId)
 	end
 	local skin = info.skin or {}
 	local color = info.color or Color3.new(0.6, 0.9, 0.6)
-	local color2 = rgb(skin.Color2, WHITE)
 	local body = skinItem("Body", skin.Body or "Jelly")
 	local material = Enum.Material[body.Material or "SmoothPlastic"]
 	local transparency = body.Transparency or 0.12
@@ -183,83 +184,6 @@ local function buildVisual(cellId)
 		extra(newPart(Enum.PartType.Block, color, Enum.Material.Neon), Vector3.new(0.3, 0.3, 1.0), 0.6, 0.3, 0.4)
 	else
 		add(newPart(Enum.PartType.Ball, color:Lerp(BLACK, 0.35), Enum.Material.SmoothPlastic, 0.2), "nucleus")
-		-- eyes
-		local eyes = skin.Eyes or "Cute"
-		if npc then
-			eyes = "Angry"
-		end
-		local eyeK, pupilK = 0.42, 0.2
-		if eyes == "Googly" then
-			eyeK, pupilK = 0.55, 0.18
-		elseif eyes == "Sleepy" then
-			pupilK = 0.3
-		end
-		if eyes == "Cyclops" then
-			extra(newPart(Enum.PartType.Ball, WHITE), Vector3.one * 0.6, 0.42, 0.75, 0)
-			extra(newPart(Enum.PartType.Ball, BLACK), Vector3.one * 0.28, 0.55, 0.95, 0)
-		else
-			local list = { -0.32, 0.32 }
-			if eyes == "Three" then
-				list = { -0.4, 0, 0.4 }
-			end
-			for _, side in list do
-				extra(newPart(Enum.PartType.Ball, WHITE), Vector3.one * eyeK, 0.42, 0.75, side)
-				extra(newPart(Enum.PartType.Ball, BLACK), Vector3.one * pupilK, 0.52, 0.92, side)
-			end
-			if eyes == "Angry" or eyes == "Sleepy" then
-				for _, side in { -0.32, 0.32 } do
-					extra(newPart(Enum.PartType.Block, color:Lerp(BLACK, 0.5)), Vector3.new(0.4, 0.08, 0.12), 0.45, 1.0, side)
-				end
-			end
-		end
-		-- mouth
-		local mouth = skin.Mouth or "Smile"
-		if npc == "macrophage" then
-			mouth = "Fangs"
-		end
-		if mouth == "Smile" or mouth == "Braces" then
-			extra(newPart(Enum.PartType.Block, mouth == "Braces" and Color3.fromRGB(190, 190, 200) or BLACK), Vector3.new(0.4, 0.06, 0.1), 0.85, 0.35, 0)
-		elseif mouth == "Fangs" then
-			extra(newPart(Enum.PartType.Block, WHITE), Vector3.new(0.1, 0.1, 0.2), 0.9, 0.3, -0.12)
-			extra(newPart(Enum.PartType.Block, WHITE), Vector3.new(0.1, 0.1, 0.2), 0.9, 0.3, 0.12)
-		elseif mouth == "Tongue" then
-			extra(newPart(Enum.PartType.Ball, Color3.fromRGB(255, 120, 150)), Vector3.one * 0.28, 0.95, 0.3, 0)
-		elseif mouth == "Mustache" then
-			extra(newPart(Enum.PartType.Block, Color3.fromRGB(70, 45, 30)), Vector3.new(0.5, 0.1, 0.14), 0.85, 0.45, 0)
-		end
-		-- pattern (in the second colour)
-		local pattern = skin.Pattern or "None"
-		if pattern == "Spots" or pattern == "Camo" or pattern == "Checkers" then
-			local spots = pattern == "Spots" and 5 or 7
-			for i = 1, spots do
-				local a = (i / spots) * math.pi * 2
-				local c = color2
-				if pattern == "Camo" then
-					c = color:Lerp(Color3.fromRGB(60, 80, 40), 0.5 + (i % 2) * 0.2)
-				end
-				local p = newPart(pattern == "Checkers" and Enum.PartType.Block or Enum.PartType.Ball, c)
-				extra(p, Vector3.one * 0.3, math.cos(a) * 0.55, 0.7, math.sin(a) * 0.55)
-			end
-		elseif pattern == "Stripes" then
-			-- three bands across the back, shorter near the edge so they stay on the body
-			-- (behind the eyes, so they never cover the face)
-			for i, at in { -0.75, -0.35, 0.05 } do
-				extra(newPart(Enum.PartType.Block, color2), Vector3.new(i == 1 and 1.1 or 1.6, 0.08, 0.2), at, 0.92, 0)
-			end
-		elseif pattern == "Flames" then
-			-- flame tongues licking forward from the back
-			for i = -2, 2 do
-				local long = 0.9 - math.abs(i) * 0.15
-				extra(newPart(Enum.PartType.Block, i % 2 == 0 and Color3.fromRGB(255, 140, 30) or Color3.fromRGB(255, 220, 60), Enum.Material.Neon),
-					Vector3.new(0.18, 0.08, long), -0.85 + long / 2, 0.9, i * 0.28)
-			end
-		elseif pattern == "Swirl" then
-			-- a spiral of dots
-			for i = 1, 9 do
-				local a, d = i * 0.9, 0.08 + i * 0.055
-				extra(newPart(Enum.PartType.Ball, color2), Vector3.one * (0.12 + i * 0.01), -0.3 + math.cos(a) * d, 0.95, math.sin(a) * d)
-			end
-		end
 	end
 	-- mutations
 	local muts = info.muts or {}
@@ -317,24 +241,6 @@ local function buildVisual(cellId)
 	if has("Special", "Sneezer") then
 		extra(newPart(Enum.PartType.Ball, color:Lerp(Color3.fromRGB(255, 120, 120), 0.5)), Vector3.one * 0.3, 0.95, 0.55, 0)
 	end
-	-- hats
-	local hat = skin.Hat or "None"
-	if hat == "Crown" then
-		extra(newPart(Enum.PartType.Cylinder, Color3.fromRGB(255, 205, 50), Enum.Material.Neon), Vector3.new(0.35, 0.6, 0.6), 0, 1.15, 0)
-	elseif hat == "Party" then
-		extra(newPart(Enum.PartType.Block, Color3.fromRGB(255, 90, 200)), Vector3.new(0.35, 0.6, 0.35), 0, 1.2, 0)
-		extra(newPart(Enum.PartType.Ball, Color3.fromRGB(255, 240, 90)), Vector3.one * 0.2, 0, 1.55, 0)
-	elseif hat == "Propeller" then
-		extra(newPart(Enum.PartType.Ball, Color3.fromRGB(80, 160, 255)), Vector3.one * 0.5, 0, 1.0, 0)
-		v.propeller = extra(newPart(Enum.PartType.Block, Color3.fromRGB(255, 80, 80)), Vector3.new(1.0, 0.06, 0.15), 0, 1.28, 0, 0)
-	elseif hat == "Halo" then
-		extra(newPart(Enum.PartType.Cylinder, Color3.fromRGB(255, 250, 180), Enum.Material.Neon, 0.2), Vector3.new(0.08, 1.0, 1.0), 0, 1.5, 0)
-	elseif hat == "Horns" then
-		extra(newPart(Enum.PartType.Block, Color3.fromRGB(200, 40, 40)), Vector3.new(0.15, 0.45, 0.15), 0.2, 1.0, -0.35)
-		extra(newPart(Enum.PartType.Block, Color3.fromRGB(200, 40, 40)), Vector3.new(0.15, 0.45, 0.15), 0.2, 1.0, 0.35)
-	elseif hat == "Laurel" then
-		extra(newPart(Enum.PartType.Cylinder, Color3.fromRGB(90, 200, 90)), Vector3.new(0.12, 1.1, 1.1), 0, 1.0, 0)
-	end
 	-- the parts above are rotated so cylinders lie flat
 	for _, e in v.extras do
 		if e.part.Shape == Enum.PartType.Cylinder then
@@ -384,31 +290,49 @@ local function buildVisual(cellId)
 	if npc == "antibody" then
 		tag.Enabled = false
 	end
-	if skin.Flag and skin.Flag ~= "" and not npc then
-		-- flag skin: the whole top of the body becomes the flag. A round CanvasGroup clips a big
-		-- flag emoji into a circle that lies just above the body; the face floats on top of it.
-		local flagGui = Instance.new("BillboardGui")
-		flagGui.AlwaysOnTop = false
-		flagGui.LightInfluence = 0
-		flagGui.Adornee = v.body
-		flagGui.Parent = v.body
-		local round = Instance.new("CanvasGroup")
-		round.Size = UDim2.fromScale(1, 1)
-		round.BackgroundColor3 = color
-		round.Parent = flagGui
-		local c = Instance.new("UICorner")
-		c.CornerRadius = UDim.new(0.5, 0)
-		c.Parent = round
-		local f = Instance.new("TextLabel")
-		f.Size = UDim2.fromScale(2.1, 2.1)
-		f.Position = UDim2.fromScale(-0.55, -0.55)
-		f.BackgroundTransparency = 1
-		f.TextScaled = true
-		f.Text = Flags.emoji(skin.Flag)
-		f.Parent = round
-		v.flagGui = flagGui
-		v.lift = 0.8 -- face parts sit above the flag
-		v.baseTransparency = math.max(v.baseTransparency, 0)
+	if npc ~= "antibody" then
+		-- the face, pattern and hat: flat 2D art (see Looks) on a billboard lying just above the
+		-- body, which the top-down camera sees face on. A flag skin turns the whole disc into the
+		-- flag (a round CanvasGroup clips a big flag emoji) with the face on top.
+		local lookGui = Instance.new("BillboardGui")
+		lookGui.Name = "Look"
+		lookGui.AlwaysOnTop = false
+		lookGui.LightInfluence = 0
+		lookGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		lookGui.Adornee = v.body
+		lookGui.Parent = v.body
+		local root = Instance.new("Frame")
+		root.AnchorPoint = Vector2.new(0.5, 0.5)
+		root.Position = UDim2.fromScale(0.5, 0.5)
+		root.Size = UDim2.fromScale(1 / LOOK_PAD, 1 / LOOK_PAD)
+		root.BackgroundTransparency = 1
+		root.Parent = lookGui
+		local flag = skin.Flag and skin.Flag ~= "" and not npc
+		if flag then
+			local round = Instance.new("CanvasGroup")
+			round.Size = UDim2.fromScale(1, 1)
+			round.BackgroundColor3 = color
+			round.ZIndex = 0
+			round.Parent = root
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0.5, 0)
+			c.Parent = round
+			local f = Instance.new("TextLabel")
+			f.Size = UDim2.fromScale(2.1, 2.1)
+			f.Position = UDim2.fromScale(-0.55, -0.55)
+			f.BackgroundTransparency = 1
+			f.TextScaled = true
+			f.Text = Flags.emoji(skin.Flag)
+			f.Parent = round
+		end
+		local lookSkin = skin
+		if npc then
+			lookSkin = { Eyes = "Angry", Mouth = "Fangs" }
+		end
+		v.look = Looks.build(root, { skin = lookSkin, color = color, flag = flag })
+		v.lookGui = lookGui
+		v.blinkAt = os.clock() + 1 + math.random() * 4
+		v.lift = 0.8 -- 3D bits on top of the body (magnet, toxin...) poke out above the look
 	end
 	model.Parent = germFolder
 	return v
@@ -431,10 +355,9 @@ local function resize(v, r)
 		v.shell.Size = Vector3.one * r * 2.15
 	end
 	v.shield.Size = Vector3.one * r * 2.5
-	if v.flagGui then
-		
-		v.flagGui.Size = UDim2.fromScale(r * 2, r * 2)
-		v.flagGui.StudsOffsetWorldSpace = Vector3.new(0, r * 1.03, 0) -- just above the top of the body
+	if v.lookGui then
+		v.lookGui.Size = UDim2.fromScale(r * 2 * LOOK_PAD, r * 2 * LOOK_PAD)
+		v.lookGui.StudsOffsetWorldSpace = Vector3.new(0, r * 1.03, 0) -- just above the top of the body
 	end
 	if v.trail then
 		v.trail.a0.Position = Vector3.new(0, 0, r * 0.8)
@@ -472,8 +395,6 @@ local function place(v, partsOut, cframesOut, t)
 		if e.part == v.tail then
 			local wiggle = math.sin(t * 12) * 0.35
 			rot = CFrame.lookAt(Vector3.zero, Vector3.new(fx + rx * wiggle, 0, fz + rz * wiggle))
-		elseif e.part == v.propeller then
-			rot = CFrame.Angles(0, t * 12, 0)
 		elseif v.jaws and (e.part == v.jaws[1] or e.part == v.jaws[2]) then
 			local chomp = 0.15 + math.abs(math.sin(t * 8)) * 0.15
 			rr = (e.part == v.jaws[1]) and -chomp or chomp
@@ -631,6 +552,23 @@ function Renderer.update(dt, t)
 					e.part.Transparency = hidden and (mine and 0.5 or 1) or 0
 				end
 				v.tag.Enabled = (not hidden or mine) and v.info.npc ~= "antibody"
+				if v.lookGui then
+					v.lookGui.Enabled = not hidden or mine
+				end
+			end
+			if v.look then
+				-- eyes follow the swim direction, blink now and then, the propeller spins
+				Looks.aim(v.look, v.dirX, v.dirZ, t)
+				local now = os.clock()
+				if now >= v.blinkAt then
+					local shut = not v.blinking
+					v.blinking = shut
+					Looks.blink(v.look, shut)
+					v.blinkAt = now + (shut and 0.12 or 2.5 + math.random() * 3.5)
+				end
+				if v.look.spin then
+					v.look.spin.Rotation = (t * 720) % 360
+				end
 			end
 			if bit(flags, FLAG_POISON) then
 				v.body.Color = v.info.color:Lerp(Color3.fromRGB(120, 255, 60), 0.4 + math.sin(t * 6) * 0.2)

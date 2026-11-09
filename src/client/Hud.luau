@@ -9,6 +9,7 @@ local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Formulas = require(ReplicatedStorage.Shared.Formulas)
 local Ui = require(script.Parent.Ui)
+local Looks = require(script.Parent.Looks)
 
 local Hud = {}
 
@@ -331,50 +332,98 @@ local function cooldownText(base, keys, seconds)
 end
 
 -- Minimap (top right, under the size board) ------------------------------------------------------
+-- A small picture of the dish: every zone in its own floor colour with its membrane and name, the
+-- sneeze nerve in the middle, you as an arrow pointing where you swim, plus the crowned germ,
+-- immune bosses and golden food (not everyone, so the map is not a free radar).
 
-local MAP = 160
-local map = make("Frame", { Size = UDim2.fromOffset(MAP, MAP), Position = UDim2.new(1, -MAP - 25, 0, 182), BackgroundColor3 = Color3.fromRGB(30, 20, 40), BackgroundTransparency = 0.2, Parent = gui }, { corner(MAP / 2), Ui.stroke(3) })
-local mapRings = {}
+local MAP = 170
+local FILL = 0.92 -- the dish fills this much of the map's width
+local map = make("Frame", { Name = "Map", Size = UDim2.fromOffset(MAP, MAP), Position = UDim2.new(1, -MAP - 22, 0, 182), BackgroundColor3 = Color3.fromRGB(30, 20, 40), BackgroundTransparency = 0.15, Parent = gui }, { corner(MAP / 2), Ui.stroke(3) })
+local mapParts = {}
 local mapDots = {}
 local mapDish = nil
 local function dot(color, size, z)
 	return make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = color, ZIndex = z or 3, Parent = map }, { corner(size / 2) })
 end
-local meDot = dot(Color3.new(1, 1, 1), 10, 6)
-Ui.stroke(2).Parent = meDot
-local mapLabel = text({ Size = UDim2.new(1, 0, 0, 18), Position = UDim2.new(0, 0, 1, 2), Text = "", Parent = map })
+-- you: a white arrow with a dark outline, turned toward where you swim (it points up at Rotation 0)
+local me = make("Frame", { Size = UDim2.fromOffset(24, 24), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, ZIndex = 20, Parent = map })
+do
+	-- a chevron: two bars meeting at the tip, white over a thicker dark copy
+	local bar = Looks.shapes.bar
+	for _, layer in { { 0.36, Color3.fromRGB(30, 20, 40), 1 }, { 0.2, Color3.new(1, 1, 1), 2 } } do
+		bar(me, 0.5, 0.12, 0.14, 0.82, layer[1], layer[2], { z = layer[3] })
+		bar(me, 0.5, 0.12, 0.86, 0.82, layer[1], layer[2], { z = layer[3] })
+	end
+end
+local meArrow = me
+local lastX, lastZ = nil, nil
+local mapLabel = text({ Size = UDim2.new(1, 20, 0, 18), Position = UDim2.new(0, -10, 1, 3), Text = "", Parent = map })
+
+local function rgb(t, fallback)
+	return t and Color3.fromRGB(t[1], t[2], t[3]) or fallback
+end
 
 -- A new dish: draw its zones
 function Hud.mapDish(info)
 	mapDish = info
-	for _, r in mapRings do
+	for _, r in mapParts do
 		r:Destroy()
 	end
-	mapRings = {}
+	mapParts = {}
+	local host = info.kind == "host" and Config.Hosts[info.host] or nil
+	local outside = rgb(info.outside, Color3.fromRGB(30, 20, 40))
+	map.BackgroundColor3 = outside:Lerp(Color3.fromRGB(20, 12, 28), 0.5)
+	local n = #info.zones
 	for i, z in info.zones do
-		local share = z.outer / info.radius
-		local c = Color3.fromRGB(255, 255, 255)
-		local ring = make("Frame", {
-			Size = UDim2.fromScale(share * 0.94, share * 0.94),
+		local share = math.min(1, z.outer / info.radius) * FILL
+		local floor = rgb(host and host.Floors and host.Floors[i], Color3.fromRGB(205, 230, 240))
+		local edge = rgb(host and (i == 1 and host.Wall or host.Membranes and host.Membranes[i]), Color3.fromRGB(150, 210, 240))
+		local disc = make("Frame", {
+			Size = UDim2.fromScale(share, share),
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
-			BackgroundColor3 = c,
-			BackgroundTransparency = 0.88 - i * 0.06,
+			BackgroundColor3 = floor,
 			ZIndex = 1 + i,
 			Parent = map,
-		}, { corner(1000) })
-		table.insert(mapRings, ring)
+		}, { corner(1000), make("UIStroke", { Thickness = i == 1 and 3 or 2, Color = edge }) })
+		table.insert(mapParts, disc)
+		-- the zone's name in the middle of its band, at the top (like the names on the floor)
+		local inner = info.zones[i + 1] and math.min(1, info.zones[i + 1].outer / info.radius) * FILL or 0
+		local band = (share - inner) / 2
+		local y = 0.5 - (inner / 2 + band / 2)
+		if i == n then
+			y = 0.5 - share * 0.27
+		end
+		-- (the middle zone's name only when there is room beside the nerve)
+		if host and band * MAP >= 11 and (i < n or share * MAP >= 56) then
+			local label = text({
+				Size = UDim2.new(0, MAP * 0.75, 0, math.clamp(band * MAP * 0.62, 9, 13)),
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, y),
+				Text = z.name,
+				ZIndex = 10,
+				Parent = map,
+			})
+			table.insert(mapParts, label)
+		end
 	end
-	local nerve = dot(info.kind == "arena" and Color3.fromRGB(120, 255, 200) or Color3.fromRGB(255, 230, 120), 9, 5)
+	-- the sneeze nerve (or the arena's exit pore) with a soft glow
+	local glowColor = info.kind == "arena" and Color3.fromRGB(120, 255, 200) or Color3.fromRGB(255, 230, 120)
+	local glow = dot(glowColor, 20, 11)
+	glow.BackgroundTransparency = 0.55
+	glow.Position = UDim2.fromScale(0.5, 0.5)
+	local nerve = dot(glowColor, 10, 12)
 	nerve.Position = UDim2.fromScale(0.5, 0.5)
-	table.insert(mapRings, nerve)
-	mapLabel.Text = info.kind == "arena" and ("Floor " .. info.floor) or info.name
+	make("UIStroke", { Thickness = 1.5, Color = Color3.fromRGB(40, 25, 50), Parent = nerve })
+	table.insert(mapParts, glow)
+	table.insert(mapParts, nerve)
+	mapLabel.Text = info.kind == "arena" and ("Floor " .. info.floor) or (host and host.Name or info.name)
 end
 
 local function mapPos(x, z)
 	local r = mapDish.radius
-	local u = (x - mapDish.cx) / r * 0.47 + 0.5
-	local v = (z - mapDish.cz) / r * 0.47 + 0.5
+	local u = (x - mapDish.cx) / r * FILL / 2 + 0.5
+	local v = (z - mapDish.cz) / r * FILL / 2 + 0.5
 	return UDim2.fromScale(u, v)
 end
 
@@ -383,34 +432,46 @@ function Hud.map(meX, meZ, markers)
 	if not mapDish then
 		return
 	end
-	meDot.Visible = meX ~= nil
+	me.Visible = meX ~= nil
 	if meX then
-		meDot.Position = mapPos(meX, meZ)
+		me.Position = mapPos(meX, meZ)
+		if lastX then
+			local dx, dz = meX - lastX, meZ - lastZ
+			if dx * dx + dz * dz > 0.01 then
+				meArrow.Rotation = math.deg(math.atan2(dz, dx)) + 90
+			end
+		end
+		lastX, lastZ = meX, meZ
 	end
 	for _, d in mapDots do
 		d.Visible = false
 	end
 	local n = 0
-	local function place(p, color, size, z)
+	local function place(p, color, size, z, icon)
 		n += 1
 		local d = mapDots[n]
 		if not d then
 			d = dot(color, size, z)
+			make("UIStroke", { Thickness = 1.5, Color = Color3.fromRGB(30, 20, 40), Parent = d })
+			text({ Name = "Icon", Size = UDim2.fromScale(1.6, 1.6), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Text = "", ZIndex = z + 1, Parent = d })
 			mapDots[n] = d
 		end
 		d.BackgroundColor3 = color
+		d.BackgroundTransparency = icon and 1 or 0
+		d:FindFirstChildOfClass("UIStroke").Enabled = icon == nil
+		d:FindFirstChild("Icon").Text = icon or ""
 		d.Size = UDim2.fromOffset(size, size)
 		d.Position = mapPos(p.x, p.z)
 		d.Visible = true
 	end
 	for _, g in markers.golden do
-		place(g, Color3.fromRGB(255, 200, 40), 7, 4)
+		place(g, Color3.fromRGB(255, 200, 40), 7, 13)
 	end
 	for _, b in markers.bosses do
-		place(b, Color3.fromRGB(255, 70, 90), 10, 5)
+		place(b, Color3.fromRGB(255, 70, 90), 10, 14)
 	end
 	if markers.king then
-		place(markers.king, Color3.fromRGB(255, 215, 0), 11, 5)
+		place(markers.king, Color3.fromRGB(255, 215, 0), 14, 15, "👑")
 	end
 end
 

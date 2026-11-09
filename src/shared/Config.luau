@@ -363,6 +363,8 @@ Config.Skins = {
 		{ Id = "Camo", Name = "Camo", Dna = 200, Price = 49 },
 		{ Id = "Checkers", Name = "Checkers", Dna = 250, Price = 49 },
 		{ Id = "Flames", Name = "Flames", Dna = 300, Price = 49 },
+		{ Id = "Hearts", Name = "Hearts", Dna = 250, Price = 49 },
+		{ Id = "Leopard", Name = "Leopard", Dna = 300, Price = 49 },
 	},
 	Eyes = {
 		{ Id = "Cute", Name = "Big Cute", Free = true },
@@ -371,6 +373,9 @@ Config.Skins = {
 		{ Id = "Cyclops", Name = "Cyclops", Dna = 120, Price = 25 },
 		{ Id = "Googly", Name = "Googly", Dna = 120, Price = 25 },
 		{ Id = "Three", Name = "Three Eyes", Dna = 160, Price = 25 },
+		{ Id = "Cat", Name = "Cat Eyes", Dna = 160, Price = 25 },
+		{ Id = "Wink", Name = "Wink", Dna = 120, Price = 25 },
+		{ Id = "Heart", Name = "Heart Eyes", Price = 49 },
 	},
 	Mouth = {
 		{ Id = "None", Name = "None", Free = true },
@@ -379,6 +384,8 @@ Config.Skins = {
 		{ Id = "Tongue", Name = "Tongue Out", Dna = 100, Price = 25 },
 		{ Id = "Mustache", Name = "Mustache", Dna = 150, Price = 25 },
 		{ Id = "Braces", Name = "Braces", Dna = 150, Price = 25 },
+		{ Id = "Kitty", Name = "Kitty", Dna = 120, Price = 25 },
+		{ Id = "Surprised", Name = "Surprised", Dna = 100, Price = 25 },
 	},
 	Hat = {
 		{ Id = "None", Name = "None", Free = true },
@@ -387,6 +394,9 @@ Config.Skins = {
 		{ Id = "Propeller", Name = "Propeller Cap", Price = 79 },
 		{ Id = "Halo", Name = "Halo", Price = 99 },
 		{ Id = "Horns", Name = "Horns", Price = 49 },
+		{ Id = "Bow", Name = "Bow", Price = 49 },
+		{ Id = "CatEars", Name = "Cat Ears", Price = 79 },
+		{ Id = "TopHat", Name = "Top Hat", Price = 99 },
 		{ Id = "Laurel", Name = "Champion Laurel", Arena = true },
 	},
 	Trail = {

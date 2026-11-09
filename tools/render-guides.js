@@ -7,6 +7,7 @@ const { execFileSync } = require("child_process");
 const { chromium } = require("playwright");
 const guiDraw = require("./gui-draw");
 const germDraw = require("./germ-draw");
+const lookTrees = require("./look-trees");
 
 const out = path.resolve(process.argv[2] || "guide-previews");
 fs.mkdirSync(out, { recursive: true });
@@ -58,21 +59,29 @@ const GUIDES = [
     ] },
 ];
 
+// the germs on the dish: [x, y (share of the screen), radius, look, name]; "You" is drawn last
+const ME_LOOK = { color: [110, 200, 255], skin: { Body: "Jelly", Pattern: "Spots", Eyes: "Cute", Mouth: "Smile", Hat: "Crown", Trail: "Sparkles", Color2: [255,255,255] }, muts: { Front: "Jaws", Back: "Flagella" }, aim: [0.55, -0.83] };
+const OTHERS = [
+  [0.22, 0.3, 30, { color: [255,150,90], skin: { Eyes: "Angry", Mouth: "Fangs", Hat: "Horns" }, muts: { Sides: "Spikes" }, aim: [0.8, 0.6] }, "SneezeQueen 4.1K"],
+  [0.78, 0.68, 16, { color: [190,140,255], skin: { Eyes: "Googly", Pattern: "Leopard", Mouth: "Tongue", Color2: [255,230,120] }, aim: [-1, 0] }, "🌱 Bubbles 900"],
+  [0.68, 0.24, 12, { color: [120,220,120], skin: { Eyes: "Cat", Mouth: "Kitty", Hat: "CatEars" }, aim: [-0.7, 0.7] }, "TinyTerror 600"],
+];
+const looks = lookTrees([ME_LOOK, ...OTHERS.map((o) => o[3])]);
 const html = (guide, tree) => `<!doctype html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=block" rel="stylesheet">
 <style>body{margin:0;width:${guide.page[0]}px;height:${guide.page[1]}px;background:#1f1229;font-family:Fredoka,sans-serif;font-weight:600;position:relative;overflow:hidden}
 #stage{position:absolute;left:${guide.at[0]}px;top:${guide.at[1]}px;width:${guide.screen[0]}px;height:${guide.screen[1]}px;transform:scale(${guide.scale});transform-origin:0 0;overflow:hidden;border-radius:${guide.touch ? 26 : 8}px;outline:${guide.touch ? "10px solid #0c0810" : "4px solid #0c0810"}}
-#world{position:absolute;left:0;top:0}
+#world,#top{position:absolute;left:0;top:0}
 .n{position:absolute;box-sizing:border-box;overflow:hidden}.t{display:flex;align-items:center;white-space:nowrap;color:#fff}
 .lab{position:absolute;background:#fff;color:#2a1838;border-radius:12px;padding:8px 12px;font-size:19px;box-shadow:0 3px 10px #0008;max-width:360px;line-height:1.2}
 h1{position:absolute;left:24px;top:8px;margin:0;color:#fff;font-size:30px}
 svg{position:absolute;left:0;top:0;pointer-events:none}</style></head><body>
 <h1>${guide.title}</h1>
-<div id="stage"><canvas id="world"></canvas></div>
+<div id="stage"><canvas id="world"></canvas><div id="looks" style="position:absolute;left:0;top:0"></div><canvas id="top"></canvas></div>
 <svg id="lines" width="${guide.page[0]}" height="${guide.page[1]}"></svg>
 <script>${germDraw}
 ${guiDraw}
-const G = ${JSON.stringify(guide)}, TREE = ${JSON.stringify(tree)};
+const G = ${JSON.stringify(guide)}, TREE = ${JSON.stringify(tree)}, LOOKS = ${JSON.stringify(looks)};
 const W = G.screen[0], H = G.screen[1];
 const cv = document.getElementById("world"); cv.width = W * 2; cv.height = H * 2; cv.style.width = W + "px"; cv.style.height = H + "px";
 const g = cv.getContext("2d"); g.scale(2, 2);
@@ -83,21 +92,21 @@ g.fillStyle = bg; g.fillRect(0, 0, W, H);
 let seed = 3; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
 for (let i = 0; i < (G.touch ? 70 : 110); i++) { const c = ["#ffe066","#8ce99a","#74c0fc","#ffa8a8","#d0bfff"][i % 5]; g.fillStyle = c; g.beginPath(); g.arc(rnd() * W, rnd() * H, 3 + rnd() * 3, 0, 7); g.fill(); }
 const u = G.touch ? 0.55 : 1;
-const me = { color: [110, 200, 255], skin: { Body: "Jelly", Pattern: "Spots", Eyes: "Cute", Mouth: "Smile", Hat: "Crown", Trail: "Sparkles", Color2: [255,255,255] }, muts: { Front: "Jaws", Back: "Flagella" } };
-const others = [
-  [0.22, 0.3, 30, { color: [255,150,90], skin: { Eyes: "Angry", Mouth: "Fangs" }, muts: { Sides: "Spikes" } }, "SneezeQueen 4.1K", "danger"],
-  [0.78, 0.68, 16, { color: [190,140,255], skin: { Eyes: "Googly", Pattern: "Stripes", Color2: [255,255,255] } }, "🌱 Bubbles 900", ""],
-  [0.68, 0.24, 12, { color: [120,220,120], skin: { Eyes: "Sleepy" } }, "TinyTerror 600", ""],
-];
-const label = (x, y, txt, s) => { g.font = "600 " + s + "px Fredoka"; g.textAlign = "center"; g.lineWidth = 3; g.strokeStyle = "#140a1e"; g.strokeText(txt, x, y); g.fillStyle = "#fff"; g.fillText(txt, x, y); };
-for (const [fx, fy, r, look, name] of others) { drawGerm(g, fx * W, fy * H, r * u * 1.4, look, 0.2); label(fx * W, fy * H + 5, name, 13 * (G.touch ? 0.8 : 1)); }
+const me = ${JSON.stringify(ME_LOOK)};
+const others = ${JSON.stringify(OTHERS)};
+const lookLayer = document.getElementById("looks");
+const topCv = document.getElementById("top"); topCv.width = W * 2; topCv.height = H * 2; topCv.style.width = W + "px"; topCv.style.height = H + "px";
+const tg = topCv.getContext("2d"); tg.scale(2, 2);
+const label = (x, y, txt, s) => { tg.font = "600 " + s + "px Fredoka"; tg.textAlign = "center"; tg.lineWidth = 3; tg.strokeStyle = "#140a1e"; tg.strokeText(txt, x, y); tg.fillStyle = "#fff"; tg.fillText(txt, x, y); };
+others.forEach(([fx, fy, r, look, name], i) => { const rr = r * u * 1.4; drawGerm(g, fx * W, fy * H, rr, look, 0.2); lookOverlay(lookLayer, fx * W, fy * H, rr, LOOKS[i + 1]); label(fx * W, fy * H + rr + 14, name, 13 * (G.touch ? 0.8 : 1)); });
 const ME = [W * 0.5, H * 0.56], meR = 34 * u * 1.4;
 drawGerm(g, ME[0], ME[1], meR, me, 0.2);
-label(ME[0], ME[1] + meR * 0.25, "You 2.6K", 15 * (G.touch ? 0.8 : 1));
+lookOverlay(lookLayer, ME[0], ME[1], meR, LOOKS[0]);
+label(ME[0], ME[1] + meR + 16, "You 2.6K", 15 * (G.touch ? 0.8 : 1));
 // where you steer
 const aim = G.touch ? [W * 0.72, H * 0.33] : [W * 0.66, H * 0.22];
-g.setLineDash([8, 6]); g.strokeStyle = "rgba(255,255,255,0.9)"; g.lineWidth = 3; g.beginPath(); g.moveTo(ME[0], ME[1] - meR); g.lineTo(aim[0], aim[1]); g.stroke(); g.setLineDash([]);
-g.font = (G.touch ? 34 : 30) + "px 'Noto Color Emoji'"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(G.touch ? "👆" : "🖱️", aim[0] + 4, aim[1] + 12);
+tg.setLineDash([8, 6]); tg.strokeStyle = "rgba(255,255,255,0.9)"; tg.lineWidth = 3; tg.beginPath(); tg.moveTo(ME[0] + meR * 0.5, ME[1] - meR * 0.9); tg.lineTo(aim[0], aim[1]); tg.stroke(); tg.setLineDash([]);
+tg.font = (G.touch ? 34 : 30) + "px 'Noto Color Emoji'"; tg.textAlign = "center"; tg.textBaseline = "middle"; tg.fillText(G.touch ? "👆" : "🖱️", aim[0] + 4, aim[1] + 12);
 // the HUD
 const stage = document.getElementById("stage");
 const root = draw({ ...TREE, Size: [0, W / G.hudScale, 0, H / G.hudScale] }, stage, W / G.hudScale, H / G.hudScale);
@@ -114,7 +123,7 @@ function target(name) {
   if (name === "cursor" || name === "finger") return inWorld(aim);
   if (name === "me") return inWorld(ME);
   if (name === "Stick") return pr(stick);
-  if (name === "map") { const t = [...stage.querySelectorAll(".n")].filter(e => Math.abs(e.getBoundingClientRect().width - e.getBoundingClientRect().height) < 2 && e.getBoundingClientRect().width > 80 * G.hudScale && e.getBoundingClientRect().left > st.left + st.width * 0.7 && e.getBoundingClientRect().top < st.top + st.height * 0.6); return t.length ? pr(t[0]) : inWorld([W - 60, 120]); }
+  if (name === "map") { const m = stage.querySelector("[data-name=Map]"); return m ? pr(m) : inWorld([W - 60, 120]); }
   if (name === "gate") { const t = byText(/SNEEZE/); return t ? pr(t.parentElement) : inWorld([W / 2, 40]); }
   if (name === "Lab") { const t = byText(/Lab$/); return pr(t.parentElement.parentElement); }
   const t = byText(new RegExp("^" + name + "\\\\b")) || byText(new RegExp("^(Chomp|Vacuum|Pierce)")) ;

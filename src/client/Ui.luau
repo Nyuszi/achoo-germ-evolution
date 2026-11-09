@@ -187,12 +187,16 @@ end
 
 -- A row in a menu list: title, a smaller line of text, and up to 2 buttons on the right.
 -- buttons = { { text, color, onClick } }. swatch = optional Color3 or emoji shown on the left.
+-- swatch: a Color3, an emoji/text, or function(box) that draws into a 44 x 44 box
 function Ui.row(list, order, title, info, buttons, swatch)
 	local row = make("Frame", { Size = UDim2.new(1, -10, 0, 60), BackgroundColor3 = Ui.ROW, LayoutOrder = order, ZIndex = 12, Parent = list }, { Ui.corner(10) })
 	local left = 10
 	if swatch then
 		if typeof(swatch) == "Color3" then
 			make("Frame", { Size = UDim2.new(0, 40, 0, 40), Position = UDim2.new(0, 10, 0, 10), BackgroundColor3 = swatch, ZIndex = 13, Parent = row }, { Ui.corner(20) })
+		elseif type(swatch) == "function" then
+			-- draws its own picture into a 44 x 44 box (the Germ Editor's item previews)
+			swatch(make("Frame", { Size = UDim2.new(0, 44, 0, 44), Position = UDim2.new(0, 8, 0, 8), BackgroundTransparency = 1, ZIndex = 13, Parent = row }))
 		else
 			Ui.text({ Size = UDim2.new(0, 44, 0, 44), Position = UDim2.new(0, 8, 0, 8), Text = tostring(swatch), ZIndex = 13, Parent = row })
 		end
