@@ -94,6 +94,10 @@ check("bounty starts at 5%", near(F.bountyShare(0), 0.05))
 check("bounty capped", near(F.bountyShare(1e6), C.BountyMaxShare))
 check("crowned bonus", F.killDna(1000, { crowned = true }) == 150)
 check("growth +25% per sneeze", near(F.growthMult(4), 2))
+check("growth bonus capped", near(F.growthMult(60), F.growthMult(12)))
+check("host 1 limits", F.hostLimits(1).slots == 2 and F.hostLimits(1).levelCap == 3 and not F.hostLimits(1).fusions)
+check("host 9 clamps to last", F.hostLimits(9).slots == 4)
+check("time format", F.formatTime(754) == "12:34" and F.formatTime(3723) == "1:02:03")
 
 -- decay and camera
 check("no decay when small", F.decay(100, 1, H1) == 0)

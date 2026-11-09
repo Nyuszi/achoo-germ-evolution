@@ -71,7 +71,9 @@ local function equippedIn(id)
 	return false
 end
 
-local function refreshLab()
+local confirmSlot = nil -- a New Run that would wipe a strain needs a second tap
+local refreshLab
+function refreshLab()
 	if not profile then
 		return
 	end
@@ -83,13 +85,25 @@ local function refreshLab()
 		n += 1
 		return n
 	end
+	local lim = Formulas.hostLimits(profile.Host)
 	if tab == "Mutations" then
+		local hostName = Config.Hosts[profile.Host].Name
+		heading(lab.list, nextN(), "In " .. hostName .. ": " .. lim.slots .. (lim.slots == 1 and " slot" or " slots") .. ", levels up to " .. lim.levelCap
+			.. (lim.slots < #Config.Slots and "  ·  sneeze to unlock more 🔓" or ""))
+		local used = 0
+		for _, slot in Config.Slots do
+			if profile.Equipped[slot] then
+				used += 1
+			end
+		end
 		for _, slot in Config.Slots do
 			local now = profile.Equipped[slot]
 			local nowName = "empty"
 			if now then
 				local base = string.gsub(now, "^#", "")
 				nowName = (Config.Mutations[base] or Config.Fusions[base] or { Name = base }).Name
+			elseif used >= lim.slots then
+				nowName = "empty (all " .. lim.slots .. " in use)"
 			end
 			heading(lab.list, nextN(), slot .. " slot: " .. nowName)
 			for _, id in Config.MutationOrder do
@@ -97,7 +111,11 @@ local function refreshLab()
 				if m.Slot == slot then
 					local level = profile.Levels[id] or 0
 					local buttons = {}
-					if level < Config.MaxMutationLevel then
+					if level >= lim.levelCap and level < Config.MaxMutationLevel then
+						table.insert(buttons, { "🔒 Lv" .. (level + 1), Ui.GREY, function()
+							Menus.notify("Level " .. (level + 1) .. " unlocks in a later host. Sneeze to get there!", "info")
+						end })
+					elseif level < Config.MaxMutationLevel then
 						local cost = Formulas.mutationCost(id, level + 1)
 						table.insert(buttons, { (level == 0 and "Buy " or "Lv" .. (level + 1) .. " ") .. fmt(cost), profile.Dna >= cost and Ui.GOOD or Ui.GREY, function()
 							call("Lab", "Upgrade", id)
@@ -115,7 +133,8 @@ local function refreshLab()
 			end
 		end
 	elseif tab == "Fusions" then
-		heading(lab.list, nextN(), "Get two mutations to level 5 to fuse them into a combo")
+		heading(lab.list, nextN(), lim.fusions and "Get two mutations to level 5 to fuse them into a combo"
+			or ("🔒 Fusions work from host " .. Config.FusionHost .. " (" .. Config.Hosts[Config.FusionHost].Name .. ")"))
 		for _, id in Config.FusionOrder do
 			local f = Config.Fusions[id]
 			local parts = {}
@@ -158,6 +177,43 @@ local function refreshLab()
 				end },
 			})
 		end
+	elseif tab == "Runs" then
+		local run = Formulas.formatTime(profile.RunSeconds or 0)
+		heading(lab.list, nextN(), "⏱️ This run: " .. (profile.RunValid and run or (run .. " (finish it, the next one is timed)"))
+			.. "   🏁 Best: " .. ((profile.BestRun or 0) > 0 and Formulas.formatTime(profile.BestRun) or "none yet"))
+		heading(lab.list, nextN(), "New Run = a fresh build from host 1. Your other strains stay saved here")
+		for i, st in profile.Strains or {} do
+			local name = Config.StrainNames[i] or ("Strain " .. i)
+			if st then
+				local info = "Host " .. st.host .. " " .. st.hostName .. " · " .. (st.muts ~= "" and st.muts or "no mutations") .. " · " .. st.runs .. (st.runs == 1 and " run" or " runs")
+				local buttons = {}
+				if st.active then
+					table.insert(buttons, { "Playing", Ui.GOLD, function() end })
+				else
+					table.insert(buttons, { "Play", Ui.GOOD, function()
+						call("Lab", "SwitchStrain", i)
+					end })
+				end
+				table.insert(buttons, { confirmSlot == i and "Sure?" or "New Run", confirmSlot == i and Ui.BAD or Ui.BLUE, function()
+					if confirmSlot == i then
+						confirmSlot = nil
+						call("Lab", "NewRun", { slot = i, sure = true })
+					else
+						confirmSlot = i
+						Menus.notify("This wipes " .. name .. "'s mutations (DNA, skills and looks stay). Tap Sure? to do it", "info")
+						refreshLab()
+					end
+				end })
+				row(lab.list, nextN(), name .. (st.active and "  ✓" or ""), info, buttons, "🧫")
+			else
+				row(lab.list, nextN(), name, "empty slot", { { "New Run", Ui.BLUE, function()
+					call("Lab", "NewRun", { slot = i })
+				end } }, "🧫")
+			end
+		end
+		heading(lab.list, nextN(), "Fair play")
+		row(lab.list, nextN(), "🌱 Rookies", "Players on their first run. Once you finish a run you can't eat or bite them in hosts", {})
+		row(lab.list, nextN(), "🔓 Unlocks per host", "Host 1 gives " .. Config.SlotsPerHost[1] .. " mutation slots. More slots, higher levels, fusions and a bigger DNA bag come as you sneeze on", {})
 	elseif tab == "Builds" then
 		local slots = profile.Passes.ExtraLoadout and 3 or 1
 		heading(lab.list, nextN(), slots == 1 and "Save your build (3 builds with the Extra Loadouts pass)" or "Save up to 3 builds")
@@ -180,7 +236,7 @@ local function refreshLab()
 		end
 	end
 end
-lab.setTabs({ "Mutations", "Fusions", "Cores", "Skills", "Builds" }, refreshLab)
+lab.setTabs({ "Mutations", "Fusions", "Cores", "Skills", "Builds", "Runs" }, refreshLab)
 lab.tab = "Mutations"
 lab.onOpen = refreshLab
 
@@ -521,16 +577,19 @@ end
 local leaders = Ui.panel("Leaders", "🏆 Leaderboards")
 local function refreshLeaders()
 	leaders.clear()
-	local id = leaders.tab or Config.Leaderboards[1].Name
+	local id = leaders.tab or Config.Leaderboards[1].Tab
 	for _, lb in Config.Leaderboards do
-		if lb.Name == id then
+		if lb.Tab == id then
 			leaders.sub.Text = "Loading..."
 			task.spawn(function()
 				local rows = Remotes.Leaders:InvokeServer(lb.Id)
 				leaders.clear()
 				leaders.sub.Text = lb.Name
 				for i, r in rows do
-					row(leaders.list, i, i .. ". " .. r.name, fmt(r.value), {})
+					row(leaders.list, i, i .. ". " .. r.name, lb.Time and Formulas.formatTime(r.value) or fmt(r.value), {})
+				end
+				if #rows == 0 then
+					row(leaders.list, 1, "Nobody yet", "Be the first!", {})
 				end
 			end)
 		end
@@ -538,7 +597,7 @@ local function refreshLeaders()
 end
 local names = {}
 for _, lb in Config.Leaderboards do
-	table.insert(names, lb.Name)
+	table.insert(names, lb.Tab)
 end
 leaders.setTabs(names, refreshLeaders)
 leaders.tab = names[1]

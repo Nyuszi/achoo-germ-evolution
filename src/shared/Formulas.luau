@@ -188,7 +188,29 @@ end
 
 -- Food and eat gains grow +25% per sneeze, forever.
 function Formulas.growthMult(sneezes)
-	return 1 + Config.SneezeGrowthBonus * (sneezes or 0)
+	return 1 + Config.SneezeGrowthBonus * math.min(sneezes or 0, Config.SneezeBonusCap)
+end
+
+-- What a build may use in a host (see Config.SlotsPerHost)
+function Formulas.hostLimits(host)
+	local n = #Config.SlotsPerHost
+	host = math.max(1, math.min(host or 1, n))
+	return {
+		slots = Config.SlotsPerHost[host],
+		levelCap = Config.LevelCapPerHost[host],
+		fusions = host >= Config.FusionHost,
+		dnaCap = Config.DnaCapPerHost[host],
+	}
+end
+
+-- "12:34" or "1:02:03"
+function Formulas.formatTime(seconds)
+	seconds = math.max(0, math.floor(seconds or 0))
+	local h, m, s = seconds // 3600, (seconds // 60) % 60, seconds % 60
+	if h > 0 then
+		return string.format("%d:%02d:%02d", h, m, s)
+	end
+	return string.format("%d:%02d", m, s)
 end
 
 -- Repeated feeding from the same player gives less each time (anti-boosting).

@@ -297,6 +297,7 @@ function World.germInfo(germ)
 		npc = germ.npc and germ.npc.kind or nil,
 		vip = germ.vip,
 		tier = germ.mutant or 0,
+		rookie = germ.rookie,
 	}
 end
 
@@ -648,8 +649,17 @@ end
 
 -- May this germ swallow that one right now? A protected player (quarantine, spawn shield,
 -- bubble) may still eat bots, so new players get an early "I ate someone!" moment.
+-- Rookie guard: inside hosts a veteran (finished a run) can't eat or bite a rookie (first run).
+local function spared(a, b)
+	return a.mode == "host" and ((b.rookie and a.veteran) or (a.rookie and b.veteran)) or false
+end
+World.spared = spared
+
 local function mayEat(eater, prey)
 	if prey.npc or eater.npc and eater.npc.kind == "antibody" then
+		return false
+	end
+	if prey.rookie and eater.veteran and prey.mode == "host" then
 		return false
 	end
 	if World.isProtected(prey) then
@@ -858,7 +868,7 @@ local function interact(dish, dt)
 						elseif not mayEat(gb, ga) then
 							separate(a, b, dist, 0.3)
 						end
-					elseif not World.isProtected(ga) and not World.isProtected(gb) then
+					elseif not World.isProtected(ga) and not World.isProtected(gb) and not spared(ga, gb) then
 						fight(a, b, dt)
 						separate(a, b, dist, 0.3)
 					else

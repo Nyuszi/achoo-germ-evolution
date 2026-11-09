@@ -363,7 +363,7 @@ local function buildVisual(cellId)
 	label.TextScaled = true
 	label.TextColor3 = info.vip and Color3.fromRGB(255, 215, 80) or WHITE
 	label.TextStrokeTransparency = 0.4
-	label.Text = info.name
+	label.Text = (info.rookie and "🌱 " or "") .. info.name -- 🌱 = first run, veterans can't eat them
 	label.Parent = tag
 	v.label = label
 	v.tag = tag
@@ -625,7 +625,7 @@ function Renderer.update(dt, t)
 				v.poisoned = false
 				v.body.Color = v.info.color
 			end
-			local text = v.info.name .. "\n" .. Formulas.formatNumber(s.size * scale)
+			local text = (v.info.rookie and "🌱 " or "") .. v.info.name .. "\n" .. Formulas.formatNumber(s.size * scale)
 			if bit(flags, FLAG_CROWN) then
 				text = "👑 " .. text
 			end

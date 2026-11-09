@@ -87,6 +87,7 @@ function PlayerService.build(player)
 		sneezes = data.Sneezes,
 		mutant = data.Mutant,
 		potion = (data.PotionUntil or 0) > os.time(),
+		host = data.Host,
 	}
 	if germ and germ.mode == "arena" then
 		build.arena = true
@@ -110,6 +111,9 @@ function PlayerService.refresh(player)
 	germ.equipped = table.clone(data.Equipped)
 	germ.vip = PlayerService.ownsPass(player, "VIP")
 	germ.mutant = data.Mutant
+	-- fair play: rookies (first run) and veterans (finished a run), see Config.RookieGuard
+	germ.rookie = Config.RookieGuard and data.Mutant == 0 or nil
+	germ.veteran = data.Mutant >= 1
 	germ.potionOn = (data.PotionUntil or 0) > os.time()
 	World.setStats(germ, Stats.compute(PlayerService.build(player)))
 	PlayerService.sendProfile(player)
@@ -177,6 +181,7 @@ function PlayerService.sync(player)
 		size = size,
 		best = data.BestSize,
 		dna = data.Dna,
+		dnaCap = Formulas.hostLimits(data.Host).dnaCap,
 		zone = zone,
 		zoneName = dish.kind == "host" and Config.Hosts[dish.host].Zones[zone] or ("Floor " .. dish.floor),
 		hostName = dish.kind == "host" and Config.Hosts[dish.host].Name or "The Infinite Petri",
@@ -251,10 +256,134 @@ function PlayerService.sendProfile(player)
 		ArenaBest = data.ArenaBest, ArenaBestEver = data.ArenaBestEver, ArenaFloor = data.ArenaFloor, Tokens = data.Tokens,
 		Mutant = data.Mutant, Sneezes = data.Sneezes, Kills = data.Kills, BestSize = data.BestSize,
 		IsDev = PlayerService.isDev(player), Studio = RunService:IsStudio(),
+		Strain = data.Strain, Strains = PlayerService.strainList(player), BestRun = data.BestRun,
+		RunSeconds = data.RunSeconds, RunValid = data.RunValid, StrainRuns = data.StrainRuns,
 	}
 	PlayerService.hooks.profileExtra(player, profile)
 	Net.Profile:FireClient(player, profile)
 	profileDirty[player] = nil
+end
+
+-- Strains (New Run) ---------------------------------------------------------------------------------
+
+local STRAIN_KEYS = { "Levels", "Fusions", "Equipped", "Loadouts", "Core", "Host", "RunSeconds", "RunValid", "StrainRuns" }
+local switchedAt = {} -- [player] = World.now() of the last New Run / switch
+
+local function storeStrain(data)
+	local snap = { Name = Config.StrainNames[data.Strain] or ("Strain " .. data.Strain) }
+	for _, k in STRAIN_KEYS do
+		snap[k] = DataService.copy(data[k])
+	end
+	for i = 1, data.Strain - 1 do
+		if data.Strains[i] == nil then
+			data.Strains[i] = false -- no holes, so it saves
+		end
+	end
+	data.Strains[data.Strain] = snap
+end
+
+local function countLevels(levels)
+	local n = 0
+	for _, l in levels do
+		n += l
+	end
+	return n
+end
+
+-- A short summary of every slot for the Lab
+function PlayerService.strainList(player)
+	local data = DataService.get(player)
+	local list = {}
+	for i = 1, Config.StrainSlots do
+		local src = (i == data.Strain) and data or data.Strains[i]
+		if type(src) == "table" then
+			local muts = {}
+			for _, slot in Config.Slots do
+				local id = src.Equipped[slot]
+				if id and Config.Mutations[id] then
+					table.insert(muts, Config.Mutations[id].Name)
+				elseif id and Config.Fusions[id] then
+					table.insert(muts, Config.Fusions[id].Name)
+				end
+			end
+			list[i] = {
+				name = Config.StrainNames[i] or ("Strain " .. i),
+				host = src.Host,
+				hostName = Config.Hosts[src.Host] and Config.Hosts[src.Host].Name or "?",
+				core = src.Core,
+				muts = table.concat(muts, ", "),
+				levels = countLevels(src.Levels),
+				runs = src.StrainRuns or 0,
+				active = i == data.Strain,
+			}
+		else
+			list[i] = false
+		end
+	end
+	return list
+end
+
+-- Start a fresh strain in a slot (fresh = true) or go back to a saved one.
+-- "sure" must be true when it would wipe a saved strain.
+function PlayerService.switchStrain(player, slot, fresh, sure)
+	local data = DataService.get(player)
+	local germ = germOf[player]
+	if not data or not germ then
+		return false, "Not ready"
+	end
+	if type(slot) ~= "number" or slot ~= math.floor(slot) or slot < 1 or slot > Config.StrainSlots then
+		return false, "Pick a slot"
+	end
+	if germ.mode ~= "host" then
+		return false, "Leave the Arena first"
+	end
+	if germ.sneezing then
+		return false, "Wait for the sneeze to finish"
+	end
+	local wait = Config.StrainSwitchCooldown - (World.now() - (switchedAt[player] or -math.huge))
+	if wait > 0 then
+		return false, "Wait " .. math.ceil(wait) .. " s"
+	end
+	local saved = slot ~= data.Strain and data.Strains[slot]
+	if fresh then
+		local wipes = slot == data.Strain or type(saved) == "table"
+		if wipes and sure ~= true then
+			return false, "That slot has a strain. Tap again to replace it"
+		end
+	elseif slot == data.Strain then
+		return false, "You're already playing this strain"
+	elseif type(saved) ~= "table" then
+		return false, "That slot is empty: start a New Run there"
+	end
+	if not (fresh and slot == data.Strain) then
+		storeStrain(data)
+	end
+	if fresh then
+		data.Levels, data.Fusions, data.Equipped, data.Loadouts = {}, {}, {}, {}
+		data.Core = "Blob"
+		data.Host = 1
+		data.RunSeconds = 0
+		data.RunValid = true
+		data.StrainRuns = 0
+	else
+		for _, k in STRAIN_KEYS do
+			if saved[k] ~= nil then
+				data[k] = DataService.copy(saved[k])
+			end
+		end
+	end
+	data.Strain = slot
+	data.Strains[slot] = nil
+	storeStrain(data)
+	switchedAt[player] = World.now()
+	World.despawn(germ)
+	PlayerService.goHost(player)
+	PlayerService.sync(player)
+	local name = Config.StrainNames[slot] or ("Strain " .. slot)
+	if fresh then
+		return true, "🧫 New Run! " .. name .. " starts fresh in " .. Config.Hosts[1].Name .. ". The run timer is on ⏱️"
+	end
+	return true, "Switched to " .. name .. " (" .. Config.Hosts[data.Host].Name .. ")"
 end
 
 -- Joining and leaving -----------------------------------------------------------------------
@@ -297,6 +426,7 @@ local function onLeave(player)
 		germOf[player] = nil
 	end
 	profileDirty[player] = nil
+	switchedAt[player] = nil
 	DataService.release(player)
 end
 
@@ -348,10 +478,22 @@ local function sneeze(germ)
 	data.Sneezes += 1
 	data.GermPoints += 1
 	local mutantUp = false
+	local runTime, runRecord = nil, false
 	if from >= #Config.Hosts then
 		data.Mutant += 1
 		data.Host = 1
 		mutantUp = true
+		-- a whole run done: time it, then the next run starts now
+		data.StrainRuns = (data.StrainRuns or 0) + 1
+		if data.RunValid then
+			runTime = data.RunSeconds
+			if data.BestRun == 0 or runTime < data.BestRun then
+				data.BestRun = runTime
+				runRecord = true
+			end
+		end
+		data.RunSeconds = 0
+		data.RunValid = true
 	else
 		data.Host = from + 1
 	end
@@ -374,6 +516,9 @@ local function sneeze(germ)
 		core = (not mutantUp and core ~= "Blob") and Config.Cores[core].Name or nil,
 		arenaUnlocked = mutantUp and data.Mutant == Config.Arena.UnlockMutant,
 		sneezeCam = PlayerService.ownsPass(player, "SneezeCam"),
+		runTime = runTime,
+		runRecord = runRecord,
+		unlocks = PlayerService.unlockText(from, to),
 	})
 	Bus.fire("Sneeze", player, { from = from, to = to, mutantUp = mutantUp })
 	if not data.FavoritePrompted then
@@ -395,13 +540,42 @@ local function sneeze(germ)
 end
 PlayerService.sneeze = sneeze
 
+-- What a new host lets you use that the last one didn't (shown after a sneeze)
+function PlayerService.unlockText(from, to)
+	local a, b = Formulas.hostLimits(from), Formulas.hostLimits(to)
+	if to < from then
+		return "Back in host 1: only " .. b.slots .. " slots and levels up to " .. b.levelCap .. " count here again"
+	end
+	local bits = {}
+	if b.slots > a.slots then
+		table.insert(bits, "🔓 " .. b.slots .. " mutation slots")
+	end
+	if b.levelCap > a.levelCap then
+		table.insert(bits, "levels up to " .. b.levelCap)
+	end
+	if b.fusions and not a.fusions then
+		table.insert(bits, "🔓 Fusions")
+	end
+	if b.dnaCap > a.dnaCap then
+		table.insert(bits, "DNA bag " .. Formulas.formatNumber(b.dnaCap))
+	end
+	return #bits > 0 and table.concat(bits, " · ") or nil
+end
+
 -- World hooks ------------------------------------------------------------------------------------
 
 local function onGainDna(germ, amount)
 	local player = germ.player
 	local data = player and DataService.get(player)
 	if data and amount > 0 then
-		data.Dna += amount
+		local cap = Formulas.hostLimits(data.Host).dnaCap
+		if data.Dna < cap then
+			data.Dna = math.min(cap, data.Dna + amount)
+			if data.Dna >= cap and not germ.dnaFullWarned then
+				germ.dnaFullWarned = true
+				Net.notify(player, "🧬 Your DNA bag is full (" .. Formulas.formatNumber(cap) .. ")! Spend it in the Lab. Sneezing into the next host makes the bag bigger", "info")
+			end
+		end
 	end
 end
 
@@ -536,6 +710,12 @@ function PlayerService.start()
 				local data = DataService.get(player)
 				if data then
 					data.TotalPlaySeconds += 1
+					if germ.mode == "host" then
+						data.RunSeconds += 1
+					end
+					if germ.dnaFullWarned and data.Dna < Formulas.hostLimits(data.Host).dnaCap * 0.9 then
+						germ.dnaFullWarned = nil
+					end
 					germ.isNewPlayer = data.TotalPlaySeconds < Config.Bots.NewPlayerMinutes * 60
 					local size = germ.alive and World.germSize(germ) or 0
 					if size > data.BestSize then

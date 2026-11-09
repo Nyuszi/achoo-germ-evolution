@@ -97,7 +97,7 @@ local function randomBuild(dish)
 			levels[id] = math.random(1, math.min(Config.MaxMutationLevel, 1 + hostLevel))
 		end
 	end
-	local build = { equipped = equipped, levels = levels, core = (dish.host and Config.Hosts[dish.host].Core) or "Blob", sneezes = math.max(0, (dish.host or 1) - 1) }
+	local build = { equipped = equipped, levels = levels, core = (dish.host and Config.Hosts[dish.host].Core) or "Blob", sneezes = math.max(0, (dish.host or 1) - 1), host = dish.host }
 	if dish.kind == "arena" then
 		build.arena = true
 		build.floor = dish.floor

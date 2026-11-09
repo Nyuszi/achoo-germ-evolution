@@ -202,7 +202,7 @@ local function referral(player, data)
 		local fd = friend and DataService.get(friend)
 		if fd and not fd.Referrals[tostring(player.UserId)] then
 			fd.Referrals[tostring(player.UserId)] = true
-			fd.Potions += Config.ReferralReward.Potion
+			fd.Potions = math.max(fd.Potions, math.min(fd.Potions + Config.ReferralReward.Potion, Config.MaxQuestPotions)) -- free potions stack up to a limit
 			Net.notify(friend, player.DisplayName .. " joined from your invite! +1 Growth Potion", "success")
 			PlayerService.markProfile(friend)
 		end
@@ -213,7 +213,9 @@ end
 
 local stores = {}
 local cache = {} -- [boardId] = { time, rows }
+local boardInfo = {} -- [boardId] = the Config entry
 for _, lb in Config.Leaderboards do
+	boardInfo[lb.Id] = lb
 	local ok, store = pcall(DataStoreService.GetOrderedDataStore, DataStoreService, lb.Store)
 	stores[lb.Id] = ok and store or nil
 end
@@ -227,6 +229,10 @@ local function boardValue(data, id)
 		return data.Kills
 	elseif id == "ArenaFloor" then
 		return data.ArenaBestEver
+	elseif id == "FastestRun" then
+		return data.BestRun
+	elseif id == "Runs" then
+		return data.Mutant
 	end
 	return 0
 end
@@ -254,7 +260,7 @@ local function readBoard(id)
 	local ok = false
 	if store then
 		ok = pcall(function()
-			local page = store:GetSortedAsync(false, 10):GetCurrentPage()
+			local page = store:GetSortedAsync(boardInfo[id].Ascending == true, 10):GetCurrentPage()
 			for i, entry in page do
 				local userId = tonumber(entry.key) or 0
 				local nameOk, name = pcall(Players.GetNameFromUserIdAsync, Players, userId)
@@ -270,7 +276,16 @@ local function readBoard(id)
 				table.insert(rows, { name = p.DisplayName, value = boardValue(data, id) })
 			end
 		end
+		local ascending = boardInfo[id].Ascending == true
+		for i = #rows, 1, -1 do
+			if rows[i].value <= 0 then
+				table.remove(rows, i) -- nothing yet (e.g. no finished run)
+			end
+		end
 		table.sort(rows, function(a, b)
+			if ascending then
+				return a.value < b.value
+			end
 			return a.value > b.value
 		end)
 	end

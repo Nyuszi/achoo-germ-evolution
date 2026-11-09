@@ -37,6 +37,14 @@ local DEFAULTS = {
 	Codes = {}, -- [code] = true
 	Cards = {}, -- [cardName] = true
 	CardSetsClaimed = {},
+	-- Strains: the top-level Levels/Fusions/Equipped/Loadouts/Core/Host are the strain in use;
+	-- Strains[i] keeps a copy of each slot's strain (false = empty slot)
+	Strain = 1,
+	Strains = {},
+	StrainRuns = 0, -- runs this strain finished
+	RunSeconds = 0, -- time spent in hosts on the current run
+	RunValid = false, -- true when the current run started in host 1 (only then can it be a record)
+	BestRun = 0, -- fastest run through all 6 hosts in seconds (0 = none yet)
 	ArenaBest = 0, -- best floor this season
 	ArenaBestEver = 0,
 	ArenaSeason = 0,
@@ -102,6 +110,7 @@ local function withRetries(fn)
 end
 
 DataService.reconcile = reconcile
+DataService.copy = deepCopy
 
 function DataService.load(player)
 	local data

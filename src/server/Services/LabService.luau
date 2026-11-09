@@ -40,6 +40,23 @@ local function clearSlot(equipped, slot)
 	end
 end
 
+-- How many slots a build fills (a fusion fills each of its slots)
+local function usedSlots(equipped)
+	local n = 0
+	for _, slot in Config.Slots do
+		if equipped[slot] then
+			n += 1
+		end
+	end
+	return n
+end
+
+local function slotsFullText(data)
+	local lim = Formulas.hostLimits(data.Host)
+	return "Only " .. lim.slots .. (lim.slots == 1 and " mutation slot" or " mutation slots") .. " in " .. Config.Hosts[data.Host].Name
+		.. ". Sneeze into the next host for more, or take one off first"
+end
+
 local actions = {}
 
 function actions.Upgrade(player, data, id)
@@ -51,13 +68,17 @@ function actions.Upgrade(player, data, id)
 	if level >= Config.MaxMutationLevel then
 		return false, m.Name .. " is already max level"
 	end
+	local lim = Formulas.hostLimits(data.Host)
+	if level >= lim.levelCap then
+		return false, "Level " .. lim.levelCap .. " is the most in " .. Config.Hosts[data.Host].Name .. ". Sneeze into the next host to go higher"
+	end
 	local cost = Formulas.mutationCost(id, level + 1)
 	if data.Dna < cost then
 		return false, "You need " .. Formulas.formatNumber(cost) .. " DNA (eat germs and food to get DNA!)"
 	end
 	data.Dna -= cost
 	data.Levels[id] = level + 1
-	if level == 0 and not data.Equipped[m.Slot] then
+	if level == 0 and not data.Equipped[m.Slot] and usedSlots(data.Equipped) < lim.slots then
 		data.Equipped[m.Slot] = id
 	end
 	return true, m.Name .. " is now level " .. (level + 1) .. "!"
@@ -74,6 +95,9 @@ function actions.Equip(player, data, id)
 			data.Equipped[m.Slot] = nil -- tap again to take it off
 			return true, m.Name .. " taken off"
 		end
+		if not data.Equipped[m.Slot] and usedSlots(data.Equipped) >= Formulas.hostLimits(data.Host).slots then
+			return false, slotsFullText(data)
+		end
 		clearSlot(data.Equipped, m.Slot)
 		data.Equipped[m.Slot] = id
 		return true, m.Name .. " equipped!"
@@ -85,6 +109,17 @@ function actions.Equip(player, data, id)
 		if data.Equipped[slots[1]] == id then
 			clearSlot(data.Equipped, slots[1])
 			return true, f.Name .. " taken off"
+		end
+		local lim = Formulas.hostLimits(data.Host)
+		if not lim.fusions then
+			return false, "Fusions work from host " .. Config.FusionHost .. " (" .. Config.Hosts[Config.FusionHost].Name .. ")"
+		end
+		local after = table.clone(data.Equipped)
+		for _, slot in slots do
+			clearSlot(after, slot)
+		end
+		if usedSlots(after) + #slots > lim.slots then
+			return false, slotsFullText(data)
 		end
 		for i, slot in slots do
 			clearSlot(data.Equipped, slot)
@@ -109,8 +144,8 @@ function actions.Fuse(player, data, id)
 		end
 	end
 	data.Fusions[id] = true
-	actions.Equip(player, data, id)
-	return true, "FUSION! " .. f.Name .. " unlocked and equipped"
+	local equipped = actions.Equip(player, data, id)
+	return true, "FUSION! " .. f.Name .. " unlocked" .. (equipped and " and equipped" or "")
 end
 
 function actions.Core(player, data, id)
@@ -172,6 +207,18 @@ function actions.LoadLoadout(player, data, n)
 	end
 	data.Equipped = equipped
 	return true, "Build " .. n .. " loaded"
+end
+
+-- arg = { slot = n, sure = bool }
+function actions.NewRun(player, data, arg)
+	if type(arg) ~= "table" then
+		return false, "Pick a slot"
+	end
+	return PlayerService.switchStrain(player, arg.slot, true, arg.sure == true)
+end
+
+function actions.SwitchStrain(player, data, slot)
+	return PlayerService.switchStrain(player, slot, false)
 end
 
 function LabService.start()

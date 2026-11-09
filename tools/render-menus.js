@@ -10,8 +10,8 @@ const { chromium } = require("playwright");
 const out = path.resolve(process.argv[2] || "menu-previews");
 fs.mkdirSync(out, { recursive: true });
 const SHOTS = [
-  ["Lab", "Mutations"], ["Lab", "Skills"], ["Editor", "Body"], ["Editor", "Flag"], ["Shop"], ["Quests", "Daily"],
-  ["Quests", "Cards"], ["Arena"], ["Leaders"], ["Feedback"], ["Dev"], ["_hud"],
+  ["Lab", "Mutations"], ["Lab", "Runs"], ["Editor", "Body"], ["Editor", "Flag"], ["Shop"], ["Quests", "Daily"],
+  ["Quests", "Cards"], ["Arena"], ["Leaders", "Speedrun"], ["Feedback"], ["Dev"], ["_hud"],
 ];
 const BAR_NAME = { Lab: "Lab", Editor: "Editor", Shop: "Shop", Quests: "Quests", Arena: "Arena", Leaders: "Top", Feedback: "Ideas", Dev: "Dev" };
 const json = path.join(out, "menus.json");

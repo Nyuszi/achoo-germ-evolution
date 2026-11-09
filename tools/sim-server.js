@@ -137,6 +137,7 @@ const wrap = (name, code) => `__define(${JSON.stringify(name)}, function()\n${to
 const run = `
 DUMP_AT = ${JSON.stringify(dumpAt)}
 local Config = require("Config")
+if EXERCISE then Config.StrainSwitchCooldown = 2 end
 local Formulas = require("Formulas")
 local World = require("World")
 local BotService = require("BotService")
@@ -250,7 +251,8 @@ while SIMTIME < total do
     nextExercise = SIMTIME + 3
     exerciseI = (exerciseI or 0) + 1
     local list = {
-      { "Dev", "Dna" }, { "Dev", "MaxLab" }, { "Lab", "Fuse", "BlackHole" }, { "Lab", "Fuse", "Fortress" }, { "Lab", "Equip", "Fortress" }, { "Lab", "Equip", "Drill" },
+      { "Lab", "Upgrade", "Jaws" }, { "Lab", "Upgrade", "Flagella" }, { "Lab", "Equip", "Flagella" },
+      { "Dev", "Dna" }, { "Dev", "Host", 4 }, { "Dev", "MaxLab" }, { "Lab", "Fuse", "BlackHole" }, { "Lab", "Fuse", "Fortress" }, { "Lab", "Equip", "Fortress" }, { "Lab", "Equip", "Drill" },
       { "Lab", "SaveLoadout", 1 }, { "Lab", "LoadLoadout", 1 }, { "Lab", "Core", "Rod" }, { "Dev", "GermPoints" }, { "Lab", "Skill", "Starter" },
       { "Shop", "BuyPass", "DoubleDna" }, { "Shop", "BuyPass", "VIP" }, { "Shop", "BuyProduct", "GrowthPotion" }, { "Shop", "UsePotion" }, { "Shop", "BuyProduct", "DnaLarge" },
       { "Shop", "BuyProduct", "ServerFever" }, { "Shop", "BuyProduct", "ImmuneStrike" }, { "Shop", "BuyItem", { kind = "Skin", cat = "Body", id = "Lava" } },
@@ -259,6 +261,7 @@ while SIMTIME < total do
       { "Editor", "Equip", "Flag", "JP" }, { "Editor", "Color", "Color", { 255, 0, 10 } }, { "Editor", "SaveOutfit", 3 }, { "Editor", "LoadOutfit", 3 },
       { "Dev", "Hazard" }, { "Dev", "Whitey" }, { "Dev", "Macrophage" }, { "Dev", "Fever" }, { "Dev", "Medicine" }, { "Dev", "Golden" }, { "Dev", "EndQuarantine" },
       { "Dev", "CompleteQuests" }, { "Quests", "Claim", 1 }, { "Quests", "Redeem", "achoo" }, { "Quests", "ClaimWeekly" }, { "Quests", "ClaimSet", "Hosts" },
+      { "Lab", "NewRun", { slot = 2 } }, { "Lab", "Upgrade", "Shell" }, { "Lab", "Upgrade", "Shell" }, { "Lab", "Upgrade", "Shell" }, { "Lab", "Upgrade", "Jaws" }, { "Lab", "Equip", "Jaws" }, { "Lab", "Fuse", "BlackHole" }, { "Lab", "SwitchStrain", 1 }, { "Lab", "SwitchStrain", 2 }, { "Lab", "NewRun", { slot = 2 } }, { "Lab", "NewRun", { slot = 2, sure = true } }, { "Lab", "SwitchStrain", 1 },
       { "Dev", "Grow" }, { "Dev", "SneezeSize" }, { "Dev", "NextHost" }, { "Dev", "Host", 4 }, { "Dev", "Hazard" }, { "Dev", "Host", 5 }, { "Dev", "Hazard" },
       { "Dev", "Host", 6 }, { "Dev", "Hazard" }, { "Dev", "Host", 3 }, { "Dev", "Hazard" }, { "Dev", "Host", 2 }, { "Dev", "Hazard" },
       { "Arena", "Enter" }, { "Dev", "Mutant" }, { "Arena", "Enter" }, { "Dev", "SneezeSize" }, { "Dev", "Tokens" }, { "Arena", "Buy", 1 }, { "Dev", "ArenaFloor" },

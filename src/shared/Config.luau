@@ -135,6 +135,28 @@ Config.BountyMaxShare = 0.25
 Config.SneezeGrowthBonus = 0.25 -- +25% food and eat gains per sneeze, forever
 Config.MutantDnaBonus = 0.5 -- +50% DNA per Mutant tier
 
+-- Strains (new runs), item limits and fair play ------------------------------------------
+-- A strain is one build: its mutations, fusions, core and which host it has reached.
+-- "New Run" starts a fresh strain in host 1 and keeps the old one saved in its slot.
+-- Cosmetics, DNA, Germ Points, skills, sneezes and Mutant tiers belong to the player, not the strain.
+Config.StrainSlots = 3
+Config.StrainNames = { "Strain A", "Strain B", "Strain C" }
+Config.StrainSwitchCooldown = 20 -- seconds between New Run / switching
+-- What a build can use grows host by host, so the first host stays simple.
+-- (Inside each host of every run, also for veterans looping back to host 1.)
+Config.SlotsPerHost = { 2, 3, 4, 4, 4, 4 } -- mutation slots you can fill
+Config.LevelCapPerHost = { 3, 4, 5, 5, 5, 5 } -- highest mutation level you can buy, and that counts, there
+Config.FusionHost = 3 -- fusions work from this host on
+-- Your DNA bag: earning DNA by playing stops when it is full (quests and purchases still add).
+Config.DnaCapPerHost = { 2000, 5000, 12000, 25000, 50000, 100000 }
+Config.MaxQuestPotions = 5 -- free Growth Potions you can stack up (bought ones always count)
+-- Bonuses that stack forever are capped so a many-times replayer is fast, not untouchable.
+Config.SneezeBonusCap = 12 -- growth bonus counts at most 12 sneezes (+300%)
+Config.MutantBonusCap = 4 -- DNA bonus counts at most 4 Mutant tiers (+200%)
+-- Rookies (players on their first run) can't be eaten or bitten by veterans (finished a run)
+-- inside hosts. Rookies can still eat veterans. The Arena is open PvP for everyone.
+Config.RookieGuard = true
+
 -- Golden food -------------------------------------------------------------------
 Config.GoldenEverySeconds = 90
 Config.GoldenShare = 0.05 -- of SneezeSize
@@ -142,7 +164,7 @@ Config.GoldenShare = 0.05 -- of SneezeSize
 -- Mutations ---------------------------------------------------------------------------
 -- Each mutation has 5 levels. Level L costs Cost * L^1.6 DNA (times the host's Scale for
 -- the DNA you earn there, see Formulas.mutationCost). Effects grow per level.
--- Active abilities: Front slot = Q, Special slot = R.
+-- Active abilities: Front slot = Q, Special slot = E.
 Config.MaxMutationLevel = 5
 Config.Mutations = {
 	Jaws = { Slot = "Front", Cost = 50, Name = "Jaws", Text = "Bite harder in same-size fights", Bite = { 0.4, 0.15 },
@@ -442,12 +464,14 @@ Config.TickRate = 20 -- server simulation steps per second
 Config.SnapshotEvery = 2 -- send positions every 2 ticks (10 per second)
 Config.GridCell = 32
 
--- Leaderboards (OrderedDataStores)
+-- Leaderboards (OrderedDataStores). Ascending boards list the smallest value first (times).
 Config.Leaderboards = {
-	{ Id = "BestSize", Name = "Biggest germ ever", Store = "LB_BestSize_v1" },
-	{ Id = "Sneezes", Name = "Most sneezes", Store = "LB_Sneezes_v1" },
-	{ Id = "Kills", Name = "Most germs eaten", Store = "LB_Kills_v1" },
-	{ Id = "ArenaFloor", Name = "Arena: highest floor", Store = "LB_ArenaFloor_v1" },
+	{ Id = "BestSize", Tab = "Size", Name = "Biggest germ ever", Store = "LB_BestSize_v1" },
+	{ Id = "Sneezes", Tab = "Sneezes", Name = "Most sneezes", Store = "LB_Sneezes_v1" },
+	{ Id = "Kills", Tab = "Eaten", Name = "Most germs eaten", Store = "LB_Kills_v1" },
+	{ Id = "ArenaFloor", Tab = "Arena", Name = "Arena: highest floor", Store = "LB_ArenaFloor_v1" },
+	{ Id = "FastestRun", Tab = "Speedrun", Name = "Fastest run through all 6 hosts", Store = "LB_FastestRun_v1", Ascending = true, Time = true },
+	{ Id = "Runs", Tab = "Runs", Name = "Most runs finished", Store = "LB_Runs_v1" },
 }
 
 return Config

@@ -169,6 +169,7 @@ local sneezeScreen = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundCol
 local sneezeBig = text({ Size = UDim2.new(0.9, 0, 0.22, 0), Position = UDim2.new(0.05, 0, 0.25, 0), Text = "ACHOO!", ZIndex = 32, Parent = sneezeScreen })
 local sneezeSub = text({ Size = UDim2.new(0.8, 0, 0, 40), Position = UDim2.new(0.1, 0, 0.5, 0), Text = "", ZIndex = 32, Parent = sneezeScreen })
 local sneezeSub2 = text({ Size = UDim2.new(0.8, 0, 0, 30), Position = UDim2.new(0.1, 0, 0.5, 46), Text = "", ZIndex = 32, TextColor3 = Color3.fromRGB(255, 240, 160), Parent = sneezeScreen })
+local sneezeSub3 = text({ Size = UDim2.new(0.8, 0, 0, 30), Position = UDim2.new(0.1, 0, 0.5, 84), Text = "", ZIndex = 32, TextColor3 = Color3.fromRGB(170, 255, 190), Parent = sneezeScreen })
 
 function Hud.sneeze(data)
 	local colors = sneezeFx[data.fx] or sneezeFx.Classic
@@ -177,17 +178,28 @@ function Hud.sneeze(data)
 	sneezeScreen.BackgroundColor3 = colors[1]
 	sneezeBig.Text = "A-A-ACHOO!"
 	sneezeSub.Text = "You were sneezed out of " .. data.from .. "!"
-	local extras = { "+" .. data.dna .. " DNA", "+1 Germ Point", "+25% growth forever" }
+	local extras = { "+" .. data.dna .. " DNA", "+1 Germ Point" }
+	if data.sneezes <= Config.SneezeBonusCap then
+		table.insert(extras, "+25% growth forever")
+	end
 	if data.core then
 		table.insert(extras, "New core: " .. data.core)
 	end
 	if data.mutantUp then
-		table.insert(extras, "MUTANT " .. data.mutant .. "! +50% DNA forever")
+		table.insert(extras, "MUTANT " .. data.mutant .. "!" .. (data.mutant <= Config.MutantBonusCap and " +50% DNA forever" or ""))
 	end
 	if data.arenaUnlocked then
 		table.insert(extras, "THE INFINITE PETRI IS OPEN!")
 	end
 	sneezeSub2.Text = table.concat(extras, "  ·  ")
+	local third = {}
+	if data.runTime then
+		table.insert(third, "⏱️ Run finished in " .. Formulas.formatTime(data.runTime) .. (data.runRecord and "  NEW BEST!" or ""))
+	end
+	if data.unlocks then
+		table.insert(third, data.unlocks)
+	end
+	sneezeSub3.Text = table.concat(third, "  ·  ")
 	-- confetti of the sneeze effect's colours
 	for i = 1, 40 do
 		local dot = make("Frame", {
@@ -439,7 +451,13 @@ function Hud.sync(newState)
 	local size = state.size
 	sizeLabel.Text = "Size " .. Formulas.formatNumber(size) .. (state.crowned and " 👑" or "")
 	zoneLabel.Text = state.zoneName .. " · inside " .. state.hostName
-	dnaLabel.Text = "🧬 " .. Formulas.formatNumber(state.dna) .. " DNA"
+	if state.dnaCap and state.dna >= state.dnaCap then
+		dnaLabel.Text = "🧬 " .. Formulas.formatNumber(state.dna) .. " DNA (FULL)"
+	elseif state.dnaCap then
+		dnaLabel.Text = "🧬 " .. Formulas.formatNumber(state.dna) .. " / " .. Formulas.formatNumber(state.dnaCap)
+	else
+		dnaLabel.Text = "🧬 " .. Formulas.formatNumber(state.dna) .. " DNA"
+	end
 	local bits = {}
 	if state.gp > 0 then
 		table.insert(bits, "⭐ " .. state.gp .. " Germ Points")

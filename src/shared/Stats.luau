@@ -8,7 +8,8 @@ local Stats = {}
 -- build = {
 --   equipped = { [slot] = mutationId or fusionId },  levels = { [mutationId] = level },
 --   core = "Blob", skills = { [skillId] = level }, passes = { [passId] = true },
---   sneezes = n, mutant = n, levelCap = n (Arena), potion = bool, arena = bool }
+--   sneezes = n, mutant = n, levelCap = n (Arena), potion = bool, arena = bool,
+--   host = n (in hosts: only Config.SlotsPerHost[host] slots and levels up to LevelCapPerHost count) }
 function Stats.compute(build)
 	local s = {
 		bite = 0, thorns = 0, armor = 0, speed = 0, pierce = 0, absorb = 0, magnet = 0,
@@ -18,6 +19,13 @@ function Stats.compute(build)
 	}
 	local levels = build.levels or {}
 	local cap = build.levelCap or Config.MaxMutationLevel
+	local slotLimit, fusionsOk = #Config.Slots, true
+	if not build.arena and build.host then
+		local lim = Formulas.hostLimits(build.host)
+		cap = math.min(cap, lim.levelCap)
+		slotLimit = lim.slots
+		fusionsOk = lim.fusions
+	end
 
 	local function addMutation(id, level)
 		level = math.min(level or 1, cap)
@@ -40,14 +48,24 @@ function Stats.compute(build)
 		end
 	end
 
-	for slot, id in pairs(build.equipped or {}) do
-		if Config.Mutations[id] then
-			addMutation(id, levels[id] or 1)
-		elseif Config.Fusions[id] and not (build.arena and (build.floor or 0) < Config.Arena.FusionFloor) then
+	-- slots fill in a fixed order, so a build with more than the host allows uses the first ones
+	local equipped = build.equipped or {}
+	local used = 0
+	for _, slot in ipairs(Config.Slots) do
+		local id = equipped[slot]
+		if id and Config.Mutations[id] then
+			used = used + 1
+			if used <= slotLimit then
+				addMutation(id, levels[id] or 1)
+			end
+		elseif id and Config.Fusions[id] and fusionsOk and not (build.arena and (build.floor or 0) < Config.Arena.FusionFloor) then
 			local f = Config.Fusions[id]
-			s.fusions[id] = true
-			for _, part in ipairs(f.Parts) do
-				addMutation(part, Config.MaxMutationLevel)
+			used = used + #f.Parts
+			if used <= slotLimit then
+				s.fusions[id] = true
+				for _, part in ipairs(f.Parts) do
+					addMutation(part, Config.MaxMutationLevel)
+				end
 			end
 		end
 	end
@@ -90,7 +108,7 @@ function Stats.compute(build)
 	-- sneezes and Mutant tiers (not in the Arena: everyone is equal there)
 	if not build.arena then
 		s.growthMult = Formulas.growthMult(build.sneezes)
-		s.dnaMult = s.dnaMult + Config.MutantDnaBonus * (build.mutant or 0)
+		s.dnaMult = s.dnaMult + Config.MutantDnaBonus * math.min(build.mutant or 0, Config.MutantBonusCap)
 		-- paid boosts work in hosts only
 		local passes = build.passes or {}
 		if passes.DoubleDna then

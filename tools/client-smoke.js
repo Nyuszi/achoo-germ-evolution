@@ -240,7 +240,9 @@ local profile = { Dna = 99999, Levels = { Jaws = 5, Suction = 5, Spikes = 2 }, F
   OwnedSkins = { ["Body:Lava"] = true }, Flags = { HU = true }, Outfits = { { Body = "Jelly", Pattern = "None", Hat = "None" } }, Passes = { ExtraLoadout = true }, Potions = 1, PotionUntil = 0,
   Quests = { Day = 1, List = { { Id = "EatGerms", Goal = 5, Progress = 5, Claimed = false }, { Id = "Grow", Goal = 3, Progress = 1, Claimed = false } }, Weekly = 7, WeeklyClaimed = false },
   Streak = { Day = 1, Count = 3 }, Cards = { Whitey = true }, CardSetsClaimed = {}, ArenaBest = 4, ArenaBestEver = 12, ArenaFloor = 10, Tokens = 50, Mutant = 1, Sneezes = 7, Kills = 3, BestSize = 9,
-  IsDev = true, Studio = true, Season = 1, SeasonLeft = 100000, ArenaUnlocked = true, Rank = "Cough" }
+  IsDev = true, Studio = true, Strain = 1, BestRun = 754, RunSeconds = 300, RunValid = true, StrainRuns = 1,
+  Strains = { { name = "Strain A", host = 3, hostName = "Big Barkley", core = "Blob", muts = "Jaws, Spikes", levels = 7, runs = 1, active = true }, false, { name = "Strain C", host = 6, hostName = "X", core = "Rod", muts = "", levels = 0, runs = 4, active = false } },
+  Season = 1, SeasonLeft = 100000, ArenaUnlocked = true, Rank = "Cough" }
 Menus.setProfile(profile)
 if MENU_SHOTS then
   state.mode = "host" state.nextGate = { name = "Sneeze", size = 25000 } state.size = 9000 Hud.sync(state) Hud.setStick(true)
@@ -249,7 +251,7 @@ if MENU_SHOTS then
 end
 for name, p in pairs(Ui.panels) do
   Ui.open(name)
-  local tabs = { "Mutations", "Fusions", "Cores", "Skills", "Builds", "Body", "Pattern", "Eyes", "Mouth", "Hat", "Trail", "Sneeze", "Flag", "Colors", "Outfits", "Daily", "Cards" }
+  local tabs = { "Mutations", "Fusions", "Cores", "Skills", "Builds", "Body", "Pattern", "Eyes", "Mouth", "Hat", "Trail", "Sneeze", "Flag", "Colors", "Outfits", "Daily", "Cards", "Runs", "Speedrun" }
   local pressed = 0
   local function press(o)
     for _, c in ipairs(o.__children) do
