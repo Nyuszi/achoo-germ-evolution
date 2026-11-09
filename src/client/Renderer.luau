@@ -28,6 +28,7 @@ local scale = 1
 local dishId = 0
 local foodParts = {} -- [foodId] = part
 local spare = {} -- unused food parts
+local goldenFood = {} -- [foodId] = { x, z }
 local latest = {} -- [cellId] = { x, z, size, flags }
 
 local function newPart(shape, color, material, transparency, parent)
@@ -71,6 +72,7 @@ local function addFood(id, x, z, value, golden)
 	end
 	local d = math.min(3, 0.8 + math.sqrt(value) * 0.3)
 	if golden == 1 then
+		goldenFood[id] = { x = x, z = z }
 		d = 5
 		p.Color = Color3.fromRGB(255, 200, 40)
 	else
@@ -84,6 +86,7 @@ end
 
 local function removeFood(id)
 	local p = foodParts[id]
+	goldenFood[id] = nil
 	if p then
 		foodParts[id] = nil
 		p.Transparency = 1
@@ -367,20 +370,31 @@ local function buildVisual(cellId)
 	if npc == "antibody" then
 		tag.Enabled = false
 	end
-	if skin.Flag and skin.Flag ~= "" then
+	if skin.Flag and skin.Flag ~= "" and not npc then
+		-- flag skin: the whole top of the body becomes the flag. A round CanvasGroup clips a big
+		-- flag emoji into a circle that lies just above the body; the face floats on top of it.
 		local flagGui = Instance.new("BillboardGui")
-		flagGui.Size = UDim2.fromScale(1.2, 1.2)
 		flagGui.AlwaysOnTop = false
 		flagGui.LightInfluence = 0
 		flagGui.Adornee = v.body
 		flagGui.Parent = v.body
+		local round = Instance.new("CanvasGroup")
+		round.Size = UDim2.fromScale(1, 1)
+		round.BackgroundColor3 = color
+		round.Parent = flagGui
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0.5, 0)
+		c.Parent = round
 		local f = Instance.new("TextLabel")
-		f.Size = UDim2.fromScale(1, 1)
+		f.Size = UDim2.fromScale(2.1, 2.1)
+		f.Position = UDim2.fromScale(-0.55, -0.55)
 		f.BackgroundTransparency = 1
 		f.TextScaled = true
 		f.Text = Flags.emoji(skin.Flag)
-		f.Parent = flagGui
+		f.Parent = round
 		v.flagGui = flagGui
+		v.lift = 0.8 -- face parts sit above the flag
+		v.baseTransparency = math.max(v.baseTransparency, 0)
 	end
 	model.Parent = germFolder
 	return v
@@ -404,9 +418,9 @@ local function resize(v, r)
 	end
 	v.shield.Size = Vector3.one * r * 2.5
 	if v.flagGui then
-		-- the flag is a big sticker on the germ (above the body so the body doesn't hide it)
-		v.flagGui.Size = UDim2.fromScale(r * 0.8, r * 0.8)
-		v.flagGui.StudsOffsetWorldSpace = Vector3.new(r * 0.45, r * 1.1, r * 0.45) -- a sticker on the lower right
+		
+		v.flagGui.Size = UDim2.fromScale(r * 2, r * 2)
+		v.flagGui.StudsOffsetWorldSpace = Vector3.new(0, r * 1.03, 0) -- just above the top of the body
 	end
 	if v.trail then
 		v.trail.a0.Position = Vector3.new(0, 0, r * 0.8)
@@ -453,7 +467,11 @@ local function place(v, partsOut, cframesOut, t)
 		if e.flat then
 			rot = rot * FLAT
 		end
-		put(e.part, Vector3.new(x + (fx * f + rx * rr) * r, r + e.up * r, z + (fz * f + rz * rr) * r), rot)
+		local up = e.up
+		if v.lift and up >= 0.2 then
+			up += v.lift
+		end
+		put(e.part, Vector3.new(x + (fx * f + rx * rr) * r, r + up * r, z + (fz * f + rz * rr) * r), rot)
 	end
 	if v.shell then
 		put(v.shell, Vector3.new(x, r, z))
@@ -646,6 +664,28 @@ function Renderer.germView(germId)
 		return nil
 	end
 	return sx / total, sz / total, Formulas.radius(total, 1), total * scale
+end
+
+-- What the minimap shows: you, the crowned germ, immune bosses and golden food (not everyone,
+-- so the map is not a free radar)
+function Renderer.markers()
+	local out = { king = nil, bosses = {}, golden = {} }
+	for id, v in Renderer.cells do
+		local s = latest[id]
+		if s and v.x then
+			if bit32.band(s.flags, FLAG_CROWN) ~= 0 and bit32.band(s.flags, FLAG_HIDDEN) == 0 then
+				out.king = { x = v.x, z = v.z }
+			end
+			local npc = v.info.npc
+			if npc == "whitey" or npc == "macrophage" then
+				table.insert(out.bosses, { x = v.x, z = v.z })
+			end
+		end
+	end
+	for _, g in goldenFood do
+		table.insert(out.golden, g)
+	end
+	return out
 end
 
 -- Biggest germs for the size board: { { name, size, germId } } (immune NPCs left out)

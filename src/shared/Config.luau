@@ -293,8 +293,9 @@ Config.GamePasses = {
 	VIP = { Id = 0, Price = 299, Name = "VIP Germ", Text = "Golden name and +10% DNA" },
 	SneezeCam = { Id = 0, Price = 49, Name = "Sneeze Cam", Text = "A longer sneeze moment with a sticker photo frame" },
 	AutoCollect = { Id = 0, Price = 149, Name = "Auto Collect", Text = "Pulls nearby food to you (not germs)" },
+	Radar = { Id = 0, Price = 199, Name = "Germ Radar", Text = "Arrows point to the 3 nearest germs: green = you can eat it, red = run (hosts only)" },
 }
-Config.GamePassOrder = { "DoubleDna", "Vaccine", "FastGrowth", "AutoCollect", "VIP", "ExtraLoadout", "SneezeCam" }
+Config.GamePassOrder = { "DoubleDna", "Vaccine", "FastGrowth", "AutoCollect", "Radar", "VIP", "ExtraLoadout", "SneezeCam" }
 Config.Products = {
 	Revive = { Id = 0, Price = 25, Name = "Revive at Size", Text = "After being eaten, come back at full size (hosts only)" },
 	GrowthPotion = { Id = 0, Price = 39, Name = "Growth Potion", Text = "2x growth for 15 minutes" },
@@ -315,6 +316,7 @@ Config.Products = {
 }
 Config.ProductOrder = { "Revive", "GrowthPotion", "DnaSmall", "DnaMedium", "DnaLarge", "ServerFever", "ImmuneStrike" }
 Config.GrowthPotionMinutes = 15
+Config.RadarRange = 450 -- studs; hidden germs (ink, camo, ghost) never show up
 Config.PrivateServerNote = "Private servers: 100 Robux a month (set it in the Creator Hub)"
 
 -- Germ Editor (cosmetics only, no stats) ----------------------------------------------------

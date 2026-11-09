@@ -38,6 +38,7 @@ V3.__add = function(a, b) return v3(a.X + b.X, a.Y + b.Y, a.Z + b.Z) end
 V3.__sub = function(a, b) return v3(a.X - b.X, a.Y - b.Y, a.Z - b.Z) end
 V3.__mul = function(a, b) if type(a) == "number" then a, b = b, a end if type(b) == "number" then return v3(a.X * b, a.Y * b, a.Z * b) end return v3(a.X * b.X, a.Y * b.Y, a.Z * b.Z) end
 Vector3 = { new = v3, one = v3(1, 1, 1), zero = v3(0, 0, 0) }
+math.atan2 = math.atan2 or math.atan
 Vector2 = { new = function(x, y) return { X = x, Y = y } end }
 local CF = {}
 CF.__index = CF
@@ -149,6 +150,8 @@ local info = { id = 7, kind = "host", host = 2, scale = 10, radius = 500, wall =
   zones = { { name = "Snout", outer = 500 }, { name = "Drool Lake", outer = 350 } }, modifiers = { "Fog" } }
 Renderer.setDish(info)
 Fx.setDish(info)
+Hud = require("Hud")
+Hud.mapDish(info)
 -- germs with every look
 local germs, cells = {}, {}
 local id = 100
@@ -211,6 +214,9 @@ Hud.sync(state)
 Hud.notify("hi", "success") Hud.announce("x") Hud.feed("a", "b", true, false) Hud.died("Bob", 2.5, true, nil) Hud.died("Bob", 2.5, false, 10)
 Hud.sneeze({ from = "A", to = "B", fx = "Glitter", dna = 100, sneezes = 1, mutant = 1, mutantUp = true, core = "Rod", arenaUnlocked = true })
 Hud.board(Renderer.board(6), 101)
+Hud.map(2400, 3, Renderer.markers())
+Hud.radar({ { x = 2500, z = 10, d = 3, kind = "prey" }, { x = 2300, z = 10, d = 3, kind = "danger" } }, 2400, 3)
+Hud.radar(nil, nil, nil)
 print("hud ok")
 -- menus with a profile
 local profile = { Dna = 99999, Levels = { Jaws = 5, Suction = 5, Spikes = 2 }, Fusions = { BlackHole = true }, Equipped = { Front = "BlackHole", Sides = "Spikes" }, Loadouts = { { Front = "Jaws" } },

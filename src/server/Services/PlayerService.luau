@@ -197,7 +197,43 @@ function PlayerService.sync(player)
 		sneezes = data.Sneezes,
 		potion = math.max(0, (data.PotionUntil or 0) - os.time()),
 		canRevive = germ.reviveSize ~= nil and now < (germ.reviveUntil or 0),
+		radar = PlayerService.radar(player, germ),
 	})
+end
+
+-- Germ Radar pass: the 3 nearest germs (world positions), whether you can eat them or they you.
+-- Hosts only (no paid help in the Arena); hidden germs never show up.
+function PlayerService.radar(player, germ)
+	if germ.mode ~= "host" or not germ.alive or not PlayerService.ownsPass(player, "Radar") then
+		return nil
+	end
+	local dish = germ.dish
+	local cx, cz = World.germCentre(germ)
+	local mine = World.germSize(germ)
+	local list = {}
+	for _, other in World.dishGerms(dish) do
+		if other ~= germ and not other.npc and not World.isHidden(other) then
+			local ox, oz = World.germCentre(other)
+			local d = math.sqrt((ox - cx) ^ 2 + (oz - cz) ^ 2)
+			if d < Config.RadarRange then
+				local size = World.germSize(other)
+				local kind = "fight"
+				if Formulas.canEat(mine, size, germ.stats.eatRatio) then
+					kind = "prey"
+				elseif Formulas.canEat(size, mine, other.stats.eatRatio) then
+					kind = "danger"
+				end
+				table.insert(list, { x = ox + dish.cx, z = oz + dish.cz, d = d, kind = kind })
+			end
+		end
+	end
+	table.sort(list, function(a, b)
+		return a.d < b.d
+	end)
+	while #list > 3 do
+		table.remove(list)
+	end
+	return list
 end
 
 -- Everything the menus show (Lab, Editor, Shop, Quests, Arena)

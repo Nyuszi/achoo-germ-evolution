@@ -41,7 +41,7 @@ end
 -- toasts, banner, kill feed
 local toast = text({ Size = UDim2.new(0, 520, 0, 34), Position = UDim2.new(0.5, -260, 0, 106), Text = "", TextTransparency = 1, Parent = gui })
 local banner = text({ Size = UDim2.new(0, 640, 0, 44), Position = UDim2.new(0.5, -320, 0.26, 0), Text = "", TextTransparency = 1, TextColor3 = Color3.fromRGB(255, 230, 120), Parent = gui })
-local feedFrame = make("Frame", { Size = UDim2.new(0, 300, 0, 120), Position = UDim2.new(1, -310, 0, 182), BackgroundTransparency = 1, Parent = gui }, {
+local feedFrame = make("Frame", { Size = UDim2.new(0, 300, 0, 120), Position = UDim2.new(1, -310, 0, 352), BackgroundTransparency = 1, Parent = gui }, {
 	make("UIListLayout", { VerticalAlignment = Enum.VerticalAlignment.Top, Padding = UDim.new(0, 2) }),
 })
 
@@ -259,6 +259,114 @@ local function cooldownText(base, keys, seconds)
 		t = t .. string.format(" %.0f", math.ceil(seconds))
 	end
 	return t
+end
+
+-- Minimap (top right, under the size board) ------------------------------------------------------
+
+local MAP = 160
+local map = make("Frame", { Size = UDim2.fromOffset(MAP, MAP), Position = UDim2.new(1, -MAP - 25, 0, 182), BackgroundColor3 = Color3.fromRGB(30, 20, 40), BackgroundTransparency = 0.2, Parent = gui }, { corner(MAP / 2), Ui.stroke(3) })
+local mapRings = {}
+local mapDots = {}
+local mapDish = nil
+local function dot(color, size, z)
+	return make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = color, ZIndex = z or 3, Parent = map }, { corner(size / 2) })
+end
+local meDot = dot(Color3.new(1, 1, 1), 10, 6)
+Ui.stroke(2).Parent = meDot
+local mapLabel = text({ Size = UDim2.new(1, 0, 0, 18), Position = UDim2.new(0, 0, 1, 2), Text = "", Parent = map })
+
+-- A new dish: draw its zones
+function Hud.mapDish(info)
+	mapDish = info
+	for _, r in mapRings do
+		r:Destroy()
+	end
+	mapRings = {}
+	for i, z in info.zones do
+		local share = z.outer / info.radius
+		local c = Color3.fromRGB(255, 255, 255)
+		local ring = make("Frame", {
+			Size = UDim2.fromScale(share * 0.94, share * 0.94),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			BackgroundColor3 = c,
+			BackgroundTransparency = 0.88 - i * 0.06,
+			ZIndex = 1 + i,
+			Parent = map,
+		}, { corner(1000) })
+		table.insert(mapRings, ring)
+	end
+	local nerve = dot(info.kind == "arena" and Color3.fromRGB(120, 255, 200) or Color3.fromRGB(255, 230, 120), 9, 5)
+	nerve.Position = UDim2.fromScale(0.5, 0.5)
+	table.insert(mapRings, nerve)
+	mapLabel.Text = info.kind == "arena" and ("Floor " .. info.floor) or info.name
+end
+
+local function mapPos(x, z)
+	local r = mapDish.radius
+	local u = (x - mapDish.cx) / r * 0.47 + 0.5
+	local v = (z - mapDish.cz) / r * 0.47 + 0.5
+	return UDim2.fromScale(u, v)
+end
+
+-- Every frame: you, the king, bosses and golden food
+function Hud.map(meX, meZ, markers)
+	if not mapDish then
+		return
+	end
+	meDot.Visible = meX ~= nil
+	if meX then
+		meDot.Position = mapPos(meX, meZ)
+	end
+	for _, d in mapDots do
+		d.Visible = false
+	end
+	local n = 0
+	local function place(p, color, size, z)
+		n += 1
+		local d = mapDots[n]
+		if not d then
+			d = dot(color, size, z)
+			mapDots[n] = d
+		end
+		d.BackgroundColor3 = color
+		d.Size = UDim2.fromOffset(size, size)
+		d.Position = mapPos(p.x, p.z)
+		d.Visible = true
+	end
+	for _, g in markers.golden do
+		place(g, Color3.fromRGB(255, 200, 40), 7, 4)
+	end
+	for _, b in markers.bosses do
+		place(b, Color3.fromRGB(255, 70, 90), 10, 5)
+	end
+	if markers.king then
+		place(markers.king, Color3.fromRGB(255, 215, 0), 11, 5)
+	end
+end
+
+-- Germ Radar pass: arrows around your germ pointing at the nearest germs
+local arrows = {}
+local RADAR_COLORS = { prey = Color3.fromRGB(120, 255, 140), danger = Color3.fromRGB(255, 90, 90), fight = Color3.fromRGB(255, 220, 90) }
+function Hud.radar(list, meX, meZ)
+	for i = 1, 3 do
+		local a = arrows[i]
+		local target = list and list[i]
+		if not a then
+			a = text({ Size = UDim2.fromOffset(56, 56), AnchorPoint = Vector2.new(0.5, 0.5), Text = "➤", ZIndex = 8, Parent = gui })
+			arrows[i] = a
+		end
+		a.Visible = target ~= nil and meX ~= nil
+		if a.Visible then
+			local dx, dz = target.x - meX, target.z - meZ
+			local angle = math.atan2(dz, dx) -- the camera looks down with north (-Z) at the top
+			local ring = 0.3
+			a.Position = UDim2.new(0.5 + math.cos(angle) * ring * 0.62, 0, 0.5 + math.sin(angle) * ring, 0)
+			a.Rotation = math.deg(angle)
+			a.TextColor3 = RADAR_COLORS[target.kind] or Ui.INK
+			a.TextTransparency = 0.1
+		end
+	end
 end
 
 -- Updates --------------------------------------------------------------------------------------

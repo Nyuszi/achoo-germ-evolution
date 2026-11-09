@@ -39,6 +39,7 @@ Menus.notify = Hud.notify
 Remotes.DishInfo.OnClientEvent:Connect(function(info)
 	Renderer.setDish(info)
 	Fx.setDish(info)
+	Hud.mapDish(info)
 	-- jump the camera to the new dish
 	camX, camZ = info.cx, info.cz
 	if info.kind == "host" then
@@ -270,6 +271,10 @@ RunService.RenderStepped:Connect(function(dt)
 			Remotes.Steer:FireServer(sx, sz)
 		end
 	end
+
+	Hud.map(cx, cz, Renderer.markers())
+	local st = Hud.state()
+	Hud.radar(st and st.radar, cx, cz)
 
 	boardTimer += dt
 	if boardTimer >= 0.5 then
