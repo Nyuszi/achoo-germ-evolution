@@ -58,7 +58,7 @@ end
 
 local function ringParts(cx, cz, radius, width, color, transparency, y)
 	local list = {}
-	local segments = 64
+	local segments = 40 -- few big parts: small ones vanish first when the camera is far
 	local length = 2 * math.pi * radius / segments + 0.6
 	for i = 1, segments do
 		local a = (i / segments) * math.pi * 2
@@ -209,7 +209,7 @@ function Fx.update(dt, camHeight)
 			end
 			wall.parts = {}
 			if wall.radius < dish.radius - 1 then
-				wall.parts = ringParts(dish.cx, dish.cz, wall.radius + 2, 4, Color3.fromRGB(120, 255, 160), 0.2, 2)
+				wall.parts = ringParts(dish.cx, dish.cz, wall.radius + 6, 12, Color3.fromRGB(120, 255, 160), 0.2, 2)
 			end
 			wall.lastDraw = os.clock()
 		end

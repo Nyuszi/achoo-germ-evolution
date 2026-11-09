@@ -140,7 +140,9 @@ local function buildHost(folder, dish)
 	for i = 2, #zones do
 		ring(folder, cx, cz, zones[i].Outer, 72, 1.2, 2.5, rgb(host.Membranes[i]), Enum.Material.Neon, 0.25)
 	end
-	ring(folder, cx, cz, dish.layout.radius + 3, 96, 14, 6, rgb(host.Wall), Enum.Material.SmoothPlastic, 0)
+	-- the wall: few big blocks rather than many small ones, because Roblox stops drawing small
+	-- parts first when the camera is far away (zoomed out, or on low graphics quality)
+	ring(folder, cx, cz, dish.layout.radius + 8, 40, 24, 16, rgb(host.Wall), Enum.Material.SmoothPlastic, 0)
 	disc(folder, cx, cz, dish.layout.radius + 400, -0.5, rgb(host.Outside), "Outside")
 	for i, info in zones do
 		local inner = zones[i + 1] and zones[i + 1].Outer or 0
@@ -188,7 +190,7 @@ local function buildArena(folder, dish)
 			part(folder, { Name = "Grid", Size = Vector3.new(half * 2, 0.05, 0.4), CFrame = CFrame.new(cx, 0.05, cz + x), Color = Color3.fromRGB(160, 200, 220) })
 		end
 	end
-	ring(folder, cx, cz, r + 3, 96, 10, 4, Color3.fromRGB(200, 240, 255), Enum.Material.Glass, 0.3)
+	ring(folder, cx, cz, r + 8, 40, 20, 16, Color3.fromRGB(200, 240, 255), Enum.Material.Glass, 0.3)
 	local pore = part(folder, {
 		Name = "ExitPore",
 		Shape = Enum.PartType.Ball,
