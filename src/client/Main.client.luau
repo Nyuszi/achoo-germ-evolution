@@ -133,6 +133,7 @@ end)
 local steerX, steerZ = nil, nil
 local touchPos = nil -- the finger currently steering
 local usingKeys = false -- steering with keys or the stick (stop when they let go)
+local padX, padZ = 0, 0 -- gamepad left stick
 
 local function screenToWorld(x, y)
 	local ray = camera:ViewportPointToRay(x, y)
@@ -198,8 +199,13 @@ local function updateSteer(cx, cz, radius)
 		steerX, steerZ = cx + kx / len * (radius + 60), cz + kz / len * (radius + 60)
 		return
 	end
-	if stickInput then
+	local sx, sz = stickX, stickZ
+	if not stickInput and padX * padX + padZ * padZ > 0.04 then
+		sx, sz = padX, padZ
+	end
+	if stickInput or sx ~= stickX or sz ~= stickZ then
 		usingKeys = true
+		local stickX, stickZ = sx, sz
 		local push = math.sqrt(stickX * stickX + stickZ * stickZ)
 		if push < 0.2 then
 			steerX, steerZ = cx, cz -- dead zone: stay put
@@ -233,9 +239,12 @@ local function updateSteer(cx, cz, radius)
 	end
 end
 
+
 UserInputService.InputChanged:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseMovement then
 		usingKeys = false
+	elseif input.KeyCode == Enum.KeyCode.Thumbstick1 then
+		padX, padZ = input.Position.X, -input.Position.Y -- stick up = screen up (-Z)
 	end
 end)
 
