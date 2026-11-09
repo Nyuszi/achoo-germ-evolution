@@ -862,6 +862,9 @@ end
 
 local function poison(target, attacker)
 	if attacker.stats.poison > 0 then
+		if not has(target, "Poison") then
+			target.poisonRate = 0 -- an old, stronger poison has worn off
+		end
 		target.poisonRate = math.max(target.poisonRate or 0, attacker.stats.poison)
 		World.addEffect(target, "Poison", 3)
 	end
@@ -1414,7 +1417,9 @@ local function stepDish(dish, dt)
 				World.setGermSize(germ, cap)
 				size = cap
 			end
-			germ.peakSize = size
+			-- the size you "had" when you die: your recent best, fading 4% a second, so a split
+			-- germ eaten piece by piece isn't judged by its last small piece
+			germ.peakSize = math.max(size, (germ.peakSize or 0) * (1 - 0.04 * dt))
 			if germ.dnaPending and germ.dnaPending >= 1 then
 				local whole = math.floor(germ.dnaPending)
 				germ.dnaPending -= whole
