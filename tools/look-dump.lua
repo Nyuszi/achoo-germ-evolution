@@ -1,6 +1,8 @@
 -- Appended to the client smoke run when LOOK_DUMP is set: builds each look (see Looks.build) on a
 -- fresh disc Frame and records the trees as JSON (in the global MENU_JSON) for the picture tools.
 local Gear = require("Gear")
+-- the HTML pictures draw flags as emoji (they cannot load Roblox images)
+for i in ipairs(require("Flags").SheetIds) do require("Flags").SheetIds[i] = "" end
 local trees = {}
 for i, l in ipairs(LOOK_SHOTS) do
   local root = Instance.new("Frame")
