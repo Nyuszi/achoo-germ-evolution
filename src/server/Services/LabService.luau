@@ -179,7 +179,7 @@ end
 
 function actions.SaveLoadout(player, data, n)
 	local max = PlayerService.ownsPass(player, "ExtraLoadout") and 3 or 1
-	if type(n) ~= "number" or n < 1 or n > max then
+	if type(n) ~= "number" or n % 1 ~= 0 or n < 1 or n > max then
 		return false, "Get the Extra Loadouts pass for 3 builds"
 	end
 	for i = 1, n - 1 do

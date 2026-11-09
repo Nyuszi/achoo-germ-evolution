@@ -214,12 +214,15 @@ function handlers.ImmuneStrike(player, data)
 	return true, "A white blood cell is hunting the king!"
 end
 
-local function skinHandler(player, data)
-	local spec = data.PendingItem
-	if not spec then
+-- The item is remembered per price product, and its price is checked again here, so paying a
+-- cheap product can never hand out an item picked at a higher price in the meantime.
+local function skinHandler(player, data, key)
+	local pending = data.PendingItems
+	local spec = type(pending) == "table" and pending[key]
+	if not spec or "Skin" .. tostring(robuxPrice(spec)) ~= key then
 		return false, "Nothing picked"
 	end
-	data.PendingItem = nil
+	pending[key] = nil
 	return true, "You got " .. grantItem(player, data, spec) .. "!"
 end
 for key in Config.Products do
@@ -234,7 +237,7 @@ local function grantProduct(player, key)
 	if not data or not handler then
 		return false
 	end
-	local ok, message = handler(player, data)
+	local ok, message = handler(player, data, key)
 	if message then
 		Net.notify(player, message, ok and "success" or "error")
 	end
@@ -319,7 +322,10 @@ function shopActions.BuyItem(player, data, spec)
 	if type(spec) ~= "table" or type(spec.kind) ~= "string" then
 		return false, "Pick an item"
 	end
-	spec = { kind = spec.kind, cat = spec.cat, id = spec.id, dna = spec.dna }
+	if (spec.cat ~= nil and type(spec.cat) ~= "string") or (spec.id ~= nil and type(spec.id) ~= "string") then
+		return false, "Pick an item"
+	end
+	spec = { kind = spec.kind, cat = spec.cat, id = spec.id, dna = spec.dna == true }
 	if spec.kind == "Skin" then
 		if ShopService.ownsSkin(data, spec.cat, spec.id) then
 			return false, "You own it already"
@@ -351,7 +357,10 @@ function shopActions.BuyItem(player, data, spec)
 		return false, "Not for sale"
 	end
 	spec.dna = nil
-	data.PendingItem = spec
+	if type(data.PendingItems) ~= "table" then
+		data.PendingItems = {}
+	end
+	data.PendingItems["Skin" .. price] = spec
 	return sellProduct(player, "Skin" .. price)
 end
 
@@ -399,7 +408,7 @@ function editorActions.Color(player, data, which, rgb)
 end
 
 function editorActions.SaveOutfit(player, data, n)
-	if type(n) ~= "number" or n < 1 or n > Config.OutfitSlots then
+	if type(n) ~= "number" or n % 1 ~= 0 or n < 1 or n > Config.OutfitSlots then
 		return false
 	end
 	for i = 1, n - 1 do
