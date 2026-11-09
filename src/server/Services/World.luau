@@ -88,6 +88,7 @@ function World.newDish(kind, index, layout)
 		ink = {}, -- { x, z, r } clouds that hide germs
 		warps = {}, -- { x, z, to }
 		spikes = {}, -- { x, z, r } Arena spike field
+		bushes = {}, -- { x, z, r } thorn bushes: small germs hide inside
 		hidden = {}, -- [germ] = true, refreshed every tick
 		viewers = {}, -- [player] = true
 		tick = 0,
@@ -97,6 +98,37 @@ function World.newDish(kind, index, layout)
 		for i = 1, 6 do
 			local a = (i / 6) * math.pi * 2
 			table.insert(dish.bubbles, { x = math.cos(a) * d, z = math.sin(a) * d })
+		end
+	end
+	if kind == "host" then
+		-- thorn bushes, spread around each zone's ring (away from the spawn bubbles and each other)
+		local H = Config.Hideouts
+		for zone, count in H.PerZone do
+			local r = H.Radius[zone]
+			local outer = layout.zones[zone].Outer - r - 8
+			local inner = (layout.zones[zone + 1] and layout.zones[zone + 1].Outer or Config.NerveRadius + 20) + r + 8
+			local placed, tries = 0, 0
+			while placed < count and tries < 200 do
+				tries += 1
+				local a = math.random() * math.pi * 2
+				local d = inner + math.random() * math.max(0, outer - inner)
+				local x, z = math.cos(a) * d, math.sin(a) * d
+				local ok = true
+				for _, b in dish.bushes do
+					if (b.x - x) ^ 2 + (b.z - z) ^ 2 < (b.r + r + 30) ^ 2 then
+						ok = false
+					end
+				end
+				for _, b in dish.bubbles do
+					if (b.x - x) ^ 2 + (b.z - z) ^ 2 < (Config.SpawnBubbleRadius + r + 10) ^ 2 then
+						ok = false
+					end
+				end
+				if ok then
+					table.insert(dish.bushes, { x = x, z = z, r = r })
+					placed += 1
+				end
+			end
 		end
 	end
 	dishes[dish.id] = dish
@@ -901,18 +933,19 @@ local function interact(dish, dt)
 							separate(a, b, dist, 0.15)
 						end
 					elseif Formulas.canEat(a.size, b.size, ga.stats.eatRatio) then
-						if mayEat(ga, gb) and Formulas.isSwallowed(dist, a.r, b.r) then
+						-- a germ hiding in a thorn bush can't be eaten
+						if mayEat(ga, gb) and not b.sheltered and Formulas.isSwallowed(dist, a.r, b.r) then
 							eatCell(a, b)
-						elseif not mayEat(ga, gb) then
+						elseif not mayEat(ga, gb) or b.sheltered then
 							separate(a, b, dist, 0.3)
 						end
 					elseif Formulas.canEat(b.size, a.size, gb.stats.eatRatio) then
-						if mayEat(gb, ga) and Formulas.isSwallowed(dist, b.r, a.r) then
+						if mayEat(gb, ga) and not a.sheltered and Formulas.isSwallowed(dist, b.r, a.r) then
 							eatCell(b, a)
-						elseif not mayEat(gb, ga) then
+						elseif not mayEat(gb, ga) or a.sheltered then
 							separate(a, b, dist, 0.3)
 						end
-					elseif not World.isProtected(ga) and not World.isProtected(gb) and not spared(ga, gb) then
+					elseif not World.isProtected(ga) and not World.isProtected(gb) and not spared(ga, gb) and not a.sheltered and not b.sheltered then
 						fight(a, b, dt)
 						separate(a, b, dist, 0.3)
 					else
@@ -1198,6 +1231,28 @@ local function stepDish(dish, dt)
 		local inside = false
 		for _, cell in germ.cells do
 			moveCell(cell, dt)
+			-- thorn bushes: small cells hide inside, big ones are pushed out and scratched
+			cell.sheltered = nil
+			for _, b in dish.bushes do
+				local dx, dz = cell.x - b.x, cell.z - b.z
+				local d2 = dx * dx + dz * dz
+				local reach = b.r + cell.r * 0.5
+				if d2 < reach * reach then
+					if cell.r < b.r * Config.Hideouts.FitShare and not germ.npc then
+						if d2 < b.r * b.r then
+							cell.sheltered = true
+							hidden[germ] = true
+						end
+					else
+						local d = math.max(0.01, math.sqrt(d2))
+						cell.x, cell.z = b.x + dx / d * reach, b.z + dz / d * reach
+						if not germ.npc then
+							cell.size -= cell.size * Config.Hideouts.Damage * dt
+							cell.r = Formulas.radius(cell.size, dish.scale)
+						end
+					end
+				end
+			end
 			if inBubble(cell) then
 				inside = true
 			end

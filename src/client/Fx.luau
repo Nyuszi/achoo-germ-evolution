@@ -1,5 +1,6 @@
 -- Draws the dish events the server tells us about: ink clouds, warp holes, the whisker sweep,
--- burning rings, the closing wall (Medicine, Arena sudden death), spikes, fever glow and fog.
+-- burning rings, the closing wall (Medicine, Arena sudden death), spikes, thorn bushes, fever glow
+-- and fog.
 local Lighting = game:GetService("Lighting")
 
 local Fx = {}
@@ -126,6 +127,34 @@ function Fx.event(kind, data)
 			local color = (i <= 2) and Color3.fromRGB(190, 90, 255) or Color3.fromRGB(80, 255, 200)
 			table.insert(groups.Warps, disc(h.x, h.z, h.r, 0.4, color, 0.1, Enum.Material.Neon))
 			table.insert(groups.Warps, disc(h.x, h.z, h.r * 0.6, 0.6, Color3.fromRGB(10, 5, 20), 0))
+		end
+	elseif kind == "Bushes" then
+		-- thorn bushes: a leafy canopy (small germs hide under it) ringed with thorns
+		clear("Bushes")
+		groups.Bushes = {}
+		local leaf, light, thorn = Color3.fromRGB(45, 120, 55), Color3.fromRGB(95, 175, 80), Color3.fromRGB(70, 45, 35)
+		for _, b in data do
+			table.insert(groups.Bushes, disc(b.x, b.z, b.r, 3.6, leaf, 0.25, Enum.Material.Grass))
+			for k = 0, 2 do
+				local a = k * 2.1 + b.x * 0.01
+				table.insert(groups.Bushes, disc(b.x + math.cos(a) * b.r * 0.4, b.z + math.sin(a) * b.r * 0.4, b.r * 0.45, 3.85, light, 0.3, Enum.Material.Grass))
+			end
+			local n = math.max(10, math.floor(b.r * 0.8))
+			for i = 1, n do
+				local a = i / n * math.pi * 2
+				local len = math.max(3, b.r * 0.3)
+				table.insert(groups.Bushes, part({
+					Size = Vector3.new(len, 1, math.max(1, b.r * 0.08)),
+					CFrame = CFrame.new(b.x + math.cos(a) * (b.r + len * 0.35), 3.6, b.z + math.sin(a) * (b.r + len * 0.35)) * CFrame.Angles(0, -a, 0),
+					Color = thorn,
+					Material = Enum.Material.Wood,
+				}))
+				table.insert(groups.Bushes, part({
+					Size = Vector3.new(len * 0.35, 1.05, math.max(0.6, b.r * 0.05)),
+					CFrame = CFrame.new(b.x + math.cos(a) * (b.r + len * 0.75), 3.6, b.z + math.sin(a) * (b.r + len * 0.75)) * CFrame.Angles(0, -a, 0),
+					Color = Color3.fromRGB(235, 225, 200),
+				}))
+			end
 		end
 	elseif kind == "Spikes" then
 		clear("Spikes")

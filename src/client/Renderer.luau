@@ -66,9 +66,11 @@ end
 
 -- Food ------------------------------------------------------------------------------------
 
+-- bright candy colours (not pastel, not glowing) so food stands out on light floors too
 local FOOD_COLORS = {
-	Color3.fromRGB(255, 240, 140), Color3.fromRGB(170, 255, 170), Color3.fromRGB(150, 220, 255),
-	Color3.fromRGB(255, 180, 230), Color3.fromRGB(255, 200, 150),
+	Color3.fromRGB(255, 50, 90), Color3.fromRGB(255, 140, 0), Color3.fromRGB(40, 200, 70),
+	Color3.fromRGB(30, 130, 255), Color3.fromRGB(150, 60, 255), Color3.fromRGB(255, 50, 200),
+	Color3.fromRGB(0, 190, 200),
 }
 
 local function addFood(id, x, z, value, golden)
@@ -79,14 +81,15 @@ local function addFood(id, x, z, value, golden)
 	if not p then
 		p = newPart(Enum.PartType.Ball, nil, Enum.Material.Neon, 0, foodFolder)
 	end
-	local d = math.min(3, 0.8 + math.sqrt(value) * 0.3)
+	local d = math.min(3.2, 1.1 + math.sqrt(value) * 0.3)
 	local y = d / 2
-	p.Material = Enum.Material.Neon
+	p.Material = Enum.Material.SmoothPlastic
 	if golden == 1 then
 		goldenFood[id] = { x = x, z = z }
 		d = 5
 		y = d / 2
 		p.Color = Color3.fromRGB(255, 200, 40)
+		p.Material = Enum.Material.Neon
 	elseif golden == 2 then
 		-- a big crumb, drawn exactly as big as a germ must be to eat it (bigger than it = you can).
 		-- Mostly sunk into the floor so small germs swim visibly over it.

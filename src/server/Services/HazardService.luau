@@ -157,6 +157,9 @@ function HazardService.start()
 		if #dish.warps > 0 then
 			Net.DishFx:FireClient(player, "Warps", worldPoints(dish, dish.warps))
 		end
+		if dish.bushes and #dish.bushes > 0 then
+			Net.DishFx:FireClient(player, "Bushes", worldPoints(dish, dish.bushes))
+		end
 		if dish.spikes and #dish.spikes > 0 then
 			Net.DishFx:FireClient(player, "Spikes", worldPoints(dish, dish.spikes))
 		end

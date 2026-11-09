@@ -8,17 +8,23 @@ Config.AutosaveSeconds = 120
 -- The dish ----------------------------------------------------------------------------
 -- Every host's insides are a round dish seen from above with 4 ring-shaped zones.
 -- The geometry is the same in every host; sizes are multiplied by the host's Scale.
-Config.DishRadius = 500
+Config.DishRadius = 600
 Config.DishSpacing = 2400 -- dishes (hosts and Arena floors) sit this far apart in the world
 Config.Zones = {
 	-- Outer = outer edge distance from the centre, MinShare = share of SneezeSize needed to enter,
 	-- MaxShare = above this the host coughs you inward (only zone 1 has one).
 	-- FoodValue is multiplied by the host's Scale.
-	{ Outer = 500, MinShare = 0, MaxShare = 0.3, FoodValue = 1.2, FoodCount = 560 },
-	{ Outer = 350, MinShare = 0.1, FoodValue = 2.4, FoodCount = 280 },
-	{ Outer = 220, MinShare = 0.3, FoodValue = 4.5, FoodCount = 150 },
-	{ Outer = 110, MinShare = 0.6, FoodValue = 8, FoodCount = 75 },
+	-- Inner zones hold bigger germs, so they get much more room than a plain bullseye would
+	-- (area per germ: Heart 4.7x and Tummy 2.2x what they had at 110/220).
+	{ Outer = 600, MinShare = 0, MaxShare = 0.3, FoodValue = 1.2, FoodCount = 560 },
+	{ Outer = 480, MinShare = 0.1, FoodValue = 2.4, FoodCount = 315 },
+	{ Outer = 370, MinShare = 0.3, FoodValue = 4.5, FoodCount = 220 },
+	{ Outer = 240, MinShare = 0.6, FoodValue = 8, FoodCount = 160 },
 }
+-- Thorn bushes: hiding spots in every host. A germ smaller than FitShare of a bush's radius
+-- slips inside and can't be seen or eaten; bigger ones are pushed out and lose Damage of their
+-- size per second while they touch the thorns. Radius in studs (the same in every host).
+Config.Hideouts = { PerZone = { 5, 4, 3, 2 }, Radius = { 14, 22, 30, 38 }, FitShare = 0.55, Damage = 0.04 }
 Config.NerveRadius = 13 -- the Sneeze Nerve in the middle of every host
 
 -- Hosts --------------------------------------------------------------------------------

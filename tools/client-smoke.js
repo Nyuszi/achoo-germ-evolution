@@ -274,7 +274,7 @@ print("gear ok")
 for i in ipairs(FlagsMod.SheetIds) do FlagsMod.SheetIds[i] = "" end
 -- effects
 for _, e in ipairs({
-  { "Ink", { { x = 1, z = 2, r = 3 } } }, { "Warps", { { x = 1, z = 2, r = 3 }, { x = 1, z = 2, r = 3 } } }, { "Spikes", { { x = 1, z = 2, r = 3 } } },
+  { "Ink", { { x = 1, z = 2, r = 3 } } }, { "Warps", { { x = 1, z = 2, r = 3 }, { x = 1, z = 2, r = 3 } } }, { "Spikes", { { x = 1, z = 2, r = 3 } } }, { "Bushes", { { x = 1, z = 2, r = 14 }, { x = 50, z = 2, r = 38 } } },
   { "Whiskers", { duration = 5, angle = 1, length = 500 } }, { "Drool", { dx = 1, dz = 0, duration = 5 } }, { "Suction", { duration = 5 } },
   { "FireWarn", { seconds = 3, from = 350 } }, { "Fire", { from = 350, duration = 5 } }, { "HazardEnd", {} }, { "Fever", {} }, { "FeverEnd", {} },
   { "Medicine", { wall = 275, duration = 60 } }, { "MedicineEnd", { wall = 500 } }, { "BossHp", { id = 1, name = "Whitey", hp = 5, max = 10 } },
