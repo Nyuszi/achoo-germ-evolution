@@ -408,6 +408,7 @@ local function buildVisual(cellId)
 		lookGui.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
 		lookGui.CanvasSize = Vector2.new(LOOK_CANVAS, LOOK_CANVAS)
 		lookGui.AlwaysOnTop = false
+		lookGui.MaxDistance = 100000 -- the default (1000 studs) would blank faces when zoomed far out
 		lookGui.LightInfluence = 0
 		lookGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 		lookGui.Adornee = v.plate

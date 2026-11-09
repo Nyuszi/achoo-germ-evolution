@@ -85,6 +85,7 @@ local function floorLabel(parent, text, x, z, width, color)
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 10
 	gui.LightInfluence = 0
+	gui.MaxDistance = 100000
 	gui.Parent = p
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
