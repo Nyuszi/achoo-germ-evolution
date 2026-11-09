@@ -804,7 +804,8 @@ local function bossContact(bossCell, otherCell, dt)
 	local boss, other = bossCell.germ, otherCell.germ
 	local npc = boss.npc
 	if npc.kind == "antibody" then
-		if not other.npc and not World.isProtected(other) and not npc.popped then
+		-- (a shielded germ, e.g. just after a sneeze, may still eat them; it just can't be slowed)
+		if not other.npc and not npc.popped then
 			local A = Config.Immune.Antibodies
 			if Formulas.canEat(otherCell.size, bossCell.size) then
 				-- big enough: swallow it (a snack) instead of getting slowed
@@ -812,9 +813,11 @@ local function bossContact(bossCell, otherCell, dt)
 				otherCell.r = Formulas.radius(otherCell.size, otherCell.dish.scale)
 				World.hooks.gainDna(other, A.Dna * A.EatDnaMult)
 				otherCell.dish.eatenBy[tostring(bossCell.id)] = otherCell.id
-			else
+			elseif not World.isProtected(other) then
 				World.addEffect(other, "Slow", A.SlowSeconds)
 				World.hooks.gainDna(other, A.Dna)
+			else
+				return -- shielded and too small: nothing happens
 			end
 			npc.popped = true
 		end
