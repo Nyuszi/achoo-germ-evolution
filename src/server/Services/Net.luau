@@ -22,7 +22,7 @@ local EVENTS = {
 	"Died", -- server -> client: you were eaten (by whom, respawn in)
 	"Sneeze", -- server -> client: you sneezed (from host, to host, effect)
 	"Prompt", -- server -> client: ask the client to show a Roblox prompt ("Favorite", "Invite")
-	"Action", -- client -> server: "Dash", "Split", "Front" (Q), "Special" (R)
+	"Action", -- client -> server: "Dash", "Split", "Front" (Q), "Special" (E)
 }
 local UNRELIABLE = {
 	"Steer", -- client -> server: where you are steering (x, z), many times a second

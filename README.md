@@ -32,7 +32,7 @@ spawn shield, 10 minute Quarantine for brand-new players, revenge bonus, anti-fe
 Mama (a boss with health; everyone who did 5% of the damage shares the reward), Fever (double food
 and DNA) and Medicine (the wall closes in for a minute).
 
-**The Lab.** 12 mutations in 4 slots, each with 5 levels; Front and Special mutations give Q / R
+**The Lab.** 12 mutations in 4 slots, each with 5 levels; Front and Special mutations give Q / E
 abilities (Chomp, Vacuum, Pierce, Ghost, Gravity Well, Blast). Two level-5 mutations fuse into one of
 8 fusions. 6 cores (body shapes) unlock by reaching hosts. Germ Points buy permanent skills.
 Builds can be saved (3 with the Extra Loadouts pass).
