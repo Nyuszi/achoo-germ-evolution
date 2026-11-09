@@ -16,8 +16,8 @@ Config.Zones = {
 	-- FoodValue is multiplied by the host's Scale.
 	-- Inner zones hold bigger germs, so they get much more room than a plain bullseye would
 	-- (area per germ: Heart 4.7x and Tummy 2.2x what they had at 110/220).
-	{ Outer = 600, MinShare = 0, MaxShare = 0.3, FoodValue = 1.2, FoodCount = 560 },
-	{ Outer = 480, MinShare = 0.1, FoodValue = 2.4, FoodCount = 315 },
+	{ Outer = 600, MinShare = 0, MaxShare = 0.3, FoodValue = 1.2, FoodCount = 720 },
+	{ Outer = 480, MinShare = 0.1, FoodValue = 2.4, FoodCount = 400 },
 	{ Outer = 370, MinShare = 0.3, FoodValue = 4.5, FoodCount = 220 },
 	{ Outer = 240, MinShare = 0.6, FoodValue = 8, FoodCount = 160 },
 }

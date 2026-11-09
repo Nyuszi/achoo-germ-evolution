@@ -223,8 +223,8 @@ while SIMTIME < total do
     thinkAt = SIMTIME + 0.25
     BotService.think(germ, brain)
     -- at sneeze size: swim to the nerve
-    if World.germSize(germ) >= germ.dish.layout.sneeze then germ.target = { x = 0, z = 0 } end
-    if math.random() < 0.02 then NET.Action.OnServerEvent[1](p, "Dash") end
+    if World.germSize(germ) >= germ.dish.layout.sneeze then germ.target = { x = 0, z = 0 } World.avoidBushes(germ) end
+    if math.random() < 0.003 then NET.Action.OnServerEvent[1](p, "Dash") end -- now and then (a dash costs 2% of your size)
   end
   -- spend DNA in the Lab now and then like a player would
   if SIMTIME >= labAt then

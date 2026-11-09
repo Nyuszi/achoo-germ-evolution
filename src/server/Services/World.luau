@@ -289,7 +289,8 @@ end
 
 -- The closest pellet within a few grid squares that a germ of this size may reach
 -- (bots use this to graze).
-function World.nearestFood(dish, x, z, reach, size)
+-- size: the whole germ (for the zones it may enter); cellSize: its biggest cell (eating is per cell)
+function World.nearestFood(dish, x, z, reach, size, cellSize)
 	local minDist, maxDist = 0, math.huge
 	if size then
 		minDist, maxDist = Formulas.allowedRange(size, dish.layout, dish.wall)
@@ -297,7 +298,8 @@ function World.nearestFood(dish, x, z, reach, size)
 	local cx, cz = cellOf(x), cellOf(z)
 	local n = math.max(1, math.ceil((reach or G) / G))
 	local best, bestD = nil, math.huge
-	local tooBigFor = size and Formulas.radius(size, dish.scale) / Config.Hideouts.FitShare or math.huge
+	local big = cellSize or size
+	local tooBigFor = big and Formulas.radius(big, dish.scale) / Config.Hideouts.FitShare or math.huge
 	for gx = cx - n, cx + n do
 		for gz = cz - n, cz + n do
 			local bucket = dish.foodGrid[gridKey(gx, gz)]
@@ -306,7 +308,7 @@ function World.nearestFood(dish, x, z, reach, size)
 					local dx, dz = pellet.x - x, pellet.z - z
 					local d = dx * dx + dz * dz
 					local fromCentre = pellet.x * pellet.x + pellet.z * pellet.z
-					if fromCentre < minDist * minDist or fromCentre > maxDist * maxDist or (pellet.need and size and size < pellet.need) or (pellet.bushR and pellet.bushR <= tooBigFor) then
+					if fromCentre < minDist * minDist or fromCentre > maxDist * maxDist or (pellet.need and big and big < pellet.need) or (pellet.bushR and pellet.bushR <= tooBigFor) then
 						d = math.huge
 					elseif pellet.golden then
 						d *= 0.1
@@ -434,10 +436,13 @@ function World.avoidBushes(germ)
 	for _, b in dish.bushes do
 		if r >= b.r * Config.Hideouts.FitShare then
 			local reach = b.r + r * 0.5 + 4
-			local u = math.clamp(((b.x - cx) * sx + (b.z - cz) * sz) / len2, 0, 1)
+			local u = ((b.x - cx) * sx + (b.z - cz) * sz) / len2
 			local dx, dz = cx + sx * u - b.x, cz + sz * u - b.z
 			local d = math.sqrt(dx * dx + dz * dz)
-			if d < reach then
+			-- only a bush between here and the target counts; food right next to a bush can be
+			-- eaten from its edge (redirecting then made bots park beside the bush forever)
+			local targetNear = (t.x - b.x) ^ 2 + (t.z - b.z) ^ 2 < reach * reach
+			if u > 0 and u < 1 and d < reach and not targetNear then
 				if d < 0.01 then
 					dx, dz, d = -sz, sx, math.sqrt(len2)
 				end

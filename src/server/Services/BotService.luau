@@ -227,7 +227,7 @@ local function think(germ, brain)
 						if d - cell.r < threatD then
 							threat, threatD, threatR = cell, d - cell.r, cell.r
 						end
-					elseif Formulas.canEat(biggest, cell.size) and World.mayEat(germ, other) then
+					elseif Formulas.canEat(biggest, cell.size) and World.mayEat(germ, other) and not cell.sheltered then
 						local skip = other.player and other.isNewPlayer
 						local bonus = 1
 						if brain.behaviour == "Bully" and germ.dish.crowned == other then
@@ -286,7 +286,7 @@ local function think(germ, brain)
 	brain.huntStart = 0
 
 	-- 3. graze
-	local pellet = World.nearestFood(germ.dish, cx, cz, 64, mySize)
+	local pellet = World.nearestFood(germ.dish, cx, cz, 64, mySize, biggest)
 	if pellet then
 		germ.target = { x = pellet.x, z = pellet.z }
 		return
