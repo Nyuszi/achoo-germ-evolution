@@ -110,6 +110,7 @@ function PlayerService.refresh(player)
 	germ.equipped = table.clone(data.Equipped)
 	germ.vip = PlayerService.ownsPass(player, "VIP")
 	germ.mutant = data.Mutant
+	germ.potionOn = (data.PotionUntil or 0) > os.time()
 	World.setStats(germ, Stats.compute(PlayerService.build(player)))
 	PlayerService.sendProfile(player)
 end

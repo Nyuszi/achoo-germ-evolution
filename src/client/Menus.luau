@@ -604,12 +604,14 @@ end
 
 -- Menu buttons -------------------------------------------------------------------------------------
 
-local bar = make("Frame", { Size = UDim2.new(0, 120, 0, 420), Position = UDim2.new(0, 10, 0.5, -190), BackgroundTransparency = 1, Parent = Ui.gui }, {
-	make("UIListLayout", { Padding = UDim.new(0, 6) }),
+-- the bar scales with the screen so it fits on phones too
+local bar = make("Frame", { Size = UDim2.new(0, 112, 0.64, 0), Position = UDim2.new(0, 10, 0.2, 0), BackgroundTransparency = 1, Parent = Ui.gui }, {
+	make("UIListLayout", { Padding = UDim.new(0, 5) }),
+	make("UISizeConstraint", { MaxSize = Vector2.new(112, 430) }),
 })
 local menuButtons = {}
 local function menuButton(name, label, color, order)
-	menuButtons[name] = button({ Size = UDim2.new(1, 0, 0, 44), Text = label, BackgroundColor3 = color, LayoutOrder = order, Parent = bar }, function()
+	menuButtons[name] = button({ Size = UDim2.new(1, 0, 0.125, -5), Text = label, BackgroundColor3 = color, LayoutOrder = order, Parent = bar }, function()
 		Ui.open(name)
 	end)
 end

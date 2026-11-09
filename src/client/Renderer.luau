@@ -404,8 +404,9 @@ local function resize(v, r)
 	end
 	v.shield.Size = Vector3.one * r * 2.5
 	if v.flagGui then
-		v.flagGui.Size = UDim2.fromScale(r * 1.1, r * 1.1)
-		v.flagGui.StudsOffset = Vector3.new(0, r * 0.2, 0)
+		-- the flag is a big sticker on the germ (above the body so the body doesn't hide it)
+		v.flagGui.Size = UDim2.fromScale(r * 0.8, r * 0.8)
+		v.flagGui.StudsOffsetWorldSpace = Vector3.new(r * 0.45, r * 1.1, r * 0.45) -- a sticker on the lower right
 	end
 	if v.trail then
 		v.trail.a0.Position = Vector3.new(0, 0, r * 0.8)

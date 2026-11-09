@@ -160,6 +160,54 @@ local function call(remote, ...)
   return ok
 end
 
+-- tiny JSON writer for the preview dumps
+local function json(v)
+  local t = type(v)
+  if t == "number" then if v ~= v or v == math.huge or v == -math.huge then return "0" end return string.format("%.3f", v)
+  elseif t == "string" then return '"' .. v:gsub('[%c"' .. string.char(92) .. ']', function(c) return string.format(string.char(92) .. "u%04x", c:byte()) end) .. '"'
+  elseif t == "boolean" then return tostring(v)
+  elseif t == "table" then
+    if #v > 0 or next(v) == nil then local o = {} for i = 1, #v do o[i] = json(v[i]) end return "[" .. table.concat(o, ",") .. "]" end
+    local o = {} for k, x in pairs(v) do if type(x) ~= "function" then table.insert(o, json(tostring(k)) .. ":" .. json(x)) end end return "{" .. table.concat(o, ",") .. "}"
+  end
+  return "null"
+end
+local function rgbOf(c) return { c[1] or 0, c[2] or 0, c[3] or 0 } end
+function DUMP(name)
+  local germ = PlayerService.germ(p)
+  local dish = germ.dish
+  local data = DataService.get(p)
+  local sc = dish.scale
+  local out = { name = name, kind = dish.kind, host = dish.host, floor = dish.floor, radius = dish.layout.radius, wall = dish.wall, probe = germ.id,
+    zones = {}, cells = {}, food = {}, bubbles = {}, ink = dish.ink, warps = {}, spikes = dish.spikes, burnFrom = dish.effects.burnFrom or 0, sneeze = dish.layout.sneeze / sc,
+    modifiers = dish.modifiers or {} }
+  for i, z in ipairs(dish.layout.zones) do
+    out.zones[i] = { name = dish.kind == "host" and Config.Hosts[dish.host].Zones[i] or "Petri Floor", outer = z.Outer, min = z.MinShare }
+  end
+  if dish.kind == "host" then
+    local h = Config.Hosts[dish.host]
+    out.theme = { floors = h.Floors, membranes = h.Membranes, wall = h.Wall, outside = h.Outside, name = h.Name }
+  else
+    out.theme = { floors = { { 205, 230, 240 } }, membranes = { { 160, 200, 220 } }, wall = { 200, 240, 255 }, outside = { 15, 20, 35 }, name = "The Infinite Petri" }
+  end
+  for _, w in ipairs(dish.warps) do table.insert(out.warps, { x = w.x, z = w.z, r = w.r }) end
+  for _, b in ipairs(dish.bubbles) do table.insert(out.bubbles, { b.x, b.z }) end
+  for _, cell in pairs(dish.cells) do
+    local g = cell.germ
+    local muts = {}
+    for slot, id in pairs(g.equipped or {}) do muts[slot] = id end
+    table.insert(out.cells, { g = g.id, x = cell.x, z = cell.z, s = cell.size / sc, real = cell.size, name = g.name, color = rgbOf(g.color), muts = muts,
+      crown = dish.crowned == g, prot = World.isProtected(g), npc = g.npc and g.npc.kind or "", flag = g.skin and g.skin.Flag or "",
+      hidden = dish.hidden[g] == true, hat = g.skin and g.skin.Hat or "None", eyes = g.skin and g.skin.Eyes or "Cute" })
+  end
+  for _, f in pairs(dish.food) do table.insert(out.food, { f.x, f.z, f.v / sc, f.golden and 1 or 0 }) end
+  local size = World.germSize(germ)
+  local cx, cz = World.germCentre(germ)
+  local zone = Formulas.zoneAt(math.sqrt(cx * cx + cz * cz), dish.layout)
+  out.hud = { size = size, dna = data.Dna, gp = data.GermPoints, zoneName = out.zones[zone].name, hostName = out.theme.name, floor = germ.arenaFloor or 0 }
+  print("DUMP " .. json(out))
+end
+
 local step = 1 / Config.TickRate
 local total = ${minutes} * 60
 local nextReport = 60
@@ -223,6 +271,26 @@ while SIMTIME < total do
       print(string.format("%5.1fs  %s %s -> %s %s", SIMTIME, c[1], table.concat(args, " "), tostring(ok), tostring(msg)))
     end
   end
+  -- PREVIEW=1: visit hosts and the Arena and print DUMP lines for tools/render-preview.js
+  if PREVIEW then
+    previewStep = previewStep or 1
+    local plan = {
+      { 30, "dump", "host1-new" },
+      { 360, "dump", "host1-growing" },
+      { 362, "Host", 2 }, { 392, "Hazard" }, { 394, "dump", "host2-drool" },
+      { 396, "Host", 4 }, { 430, "Hazard" }, { 434.5, "dump", "host4-fire" },
+      { 436, "Host", 5 }, { 470, "Grow" }, { 471, "dump", "host5-ink" },
+      { 473, "Host", 6 }, { 505, "Grow" }, { 506, "dump", "host6-warps" },
+      { 508, "Mutant" }, { 509, "Arena" }, { 560, "dump", "arena" },
+    }
+    local step = plan[previewStep]
+    if step and SIMTIME >= step[1] then
+      previewStep = previewStep + 1
+      if step[2] == "dump" then DUMP(step[3])
+      elseif step[2] == "Arena" then NET.Arena.OnServerInvoke(p, "Enter")
+      else NET.Dev.OnServerInvoke(p, step[2], step[3]) end
+    end
+  end
   if TESTARENA and SIMTIME >= TESTARENA and not ARENADONE then
     ARENADONE = true
     call("Dev", "Mutant")
@@ -235,7 +303,7 @@ for i = math.max(1, #log - 40), #log do print(log[i]) end
 `;
 
 const services = ["Net", "Bus", "DataService", "World", "MapBuilder", "DishService", "HazardService", "ImmuneService", "BotService", "PlayerService", "LabService", "ShopService", "ArenaService", "QuestService", "DevService", "FeedbackService"];
-let code = prelude + `EXERCISE = ${process.env.EXERCISE ? 'true' : 'false'}\nTESTARENA = ${process.env.ARENA_AT ? Number(process.env.ARENA_AT) * 60 : "nil"}\n`;
+let code = prelude + `PREVIEW = ${process.env.PREVIEW ? 'true' : 'false'}\nEXERCISE = ${process.env.EXERCISE ? 'true' : 'false'}\nTESTARENA = ${process.env.ARENA_AT ? Number(process.env.ARENA_AT) * 60 : "nil"}\n`;
 for (const n of ["Config", "Formulas", "Names", "Stats", "Flags"]) code += wrap(n, read(`shared/${n}.luau`));
 for (const n of services) if (n !== "Net" && n !== "MapBuilder") code += wrap(n, read(`server/Services/${n}.luau`));
 code += wrap("Main", read("server/Main.server.luau").replace(/script\.Parent\.Services/g, "script.Parent"));
