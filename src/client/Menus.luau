@@ -709,8 +709,10 @@ end
 
 -- Menu buttons -------------------------------------------------------------------------------------
 
--- the bar scales with the screen so it fits on phones too
-local bar = make("Frame", { Size = UDim2.new(0, 112, 0.64, 0), Position = UDim2.new(0, 10, 0.2, 0), BackgroundTransparency = 1, Parent = Ui.gui }, {
+-- the bar scales with the screen so it fits on phones too. On PC, Roblox's chat window is moved to
+-- the bottom left (see Main), so the bar stays in the upper part of the screen, clear of it.
+local touchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local bar = make("Frame", { Size = UDim2.new(0, 112, touchOnly and 0.64 or 0.42, 0), Position = UDim2.new(0, 10, 0.2, 0), BackgroundTransparency = 1, Parent = Ui.gui }, {
 	make("UIListLayout", { Padding = UDim.new(0, 5) }),
 	make("UISizeConstraint", { MaxSize = Vector2.new(112, 430) }),
 })

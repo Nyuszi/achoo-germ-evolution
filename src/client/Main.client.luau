@@ -25,6 +25,15 @@ pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
 end)
+-- On PC the chat window sits at the top left, right over the menu bar: move it to the bottom left.
+-- (On phones the chat stays closed behind its button until you open it.)
+pcall(function()
+	if UserInputService.KeyboardEnabled then
+		local chat = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration")
+		chat.VerticalAlignment = Enum.VerticalAlignment.Bottom
+		chat.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	end
+end)
 
 local myGermId = nil
 local alive = false
