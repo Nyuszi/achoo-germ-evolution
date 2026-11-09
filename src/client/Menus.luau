@@ -39,8 +39,15 @@ local function germPicture(parent, size, skin, pos, muts, core)
 	local c = skin.Color or { 120, 220, 120 }
 	local color = Color3.fromRGB(c[1], c[2], c[3])
 	local flag = skin.Flag ~= nil and skin.Flag ~= ""
-	local disc = make(flag and "CanvasGroup" or "Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundColor3 = color, ZIndex = 1, Parent = parent }, { Ui.corner(size / 2) })
+	local disc = make(flag and not Flags.picture(skin.Flag) and "CanvasGroup" or "Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundColor3 = color, ZIndex = 1, Parent = parent }, { Ui.corner(size / 2) })
+	local flagImage, flagOffset, flagRect = nil, nil, nil
 	if flag then
+		flagImage, flagOffset, flagRect = Flags.picture(skin.Flag)
+	end
+	if flagImage then
+		make("ImageLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = flagImage, ImageRectOffset = flagOffset, ImageRectSize = flagRect, ZIndex = 1, Parent = disc }, { Ui.corner(size / 2) })
+		disc = make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundTransparency = 1, ZIndex = 2, Parent = parent }, { Ui.corner(size / 2) })
+	elseif flag then
 		text({ Size = UDim2.fromScale(2.1, 2.1), Position = UDim2.fromScale(-0.55, -0.55), Text = Flags.emoji(skin.Flag), Parent = disc })
 		disc = make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundTransparency = 1, ZIndex = 2, Parent = parent }, { Ui.corner(size / 2) })
 	end
@@ -419,7 +426,10 @@ local function refreshEditor()
 					end } or { Config.FlagPrice .. " R$", Ui.GOLD, function()
 						call("Shop", "BuyItem", { kind = "Flag", id = f.Code })
 					end },
-				}, Flags.emoji(f.Code))
+				}, Flags.picture(f.Code) and function(box)
+					local image, offset, rect = Flags.picture(f.Code)
+					make("ImageLabel", { Size = UDim2.fromOffset(40, 40), Position = UDim2.fromOffset(2, 2), BackgroundTransparency = 1, Image = image, ImageRectOffset = offset, ImageRectSize = rect, ZIndex = 13, Parent = box }, { Ui.corner(20) })
+				end or Flags.emoji(f.Code))
 			end
 		end
 	elseif tab == "Outfits" then

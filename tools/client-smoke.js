@@ -51,6 +51,7 @@ Vector2 = { new = function(x, y) return { X = x, Y = y } end }
 local CF = {}
 CF.__index = CF
 CF.__mul = function(a, b) return setmetatable({}, CF) end
+function CF:PointToObjectSpace(p) return p end
 CFrame = { new = function() return setmetatable({}, CF) end, lookAt = function() return setmetatable({}, CF) end, Angles = function() return setmetatable({}, CF) end }
 local C3 = {}
 C3.__index = C3
@@ -184,6 +185,11 @@ for _, e in ipairs({ "Cute", "Googly", "Sleepy", "Heart" }) do
   assert(h.spin, "propeller spin frame")
 end
 print("looks ok")
+-- flag pictures from the (uploaded) flag sheets; reset after the renderer tests so the picture
+-- tools keep drawing emoji
+local FlagsMod = require("Flags")
+for i in ipairs(FlagsMod.SheetIds) do FlagsMod.SheetIds[i] = "rbxassetid://" .. i end
+assert(FlagsMod.picture("HU") and FlagsMod.picture("ZW") and not FlagsMod.picture("XX"), "flag pictures")
 local info = { id = 7, kind = "host", host = 2, scale = 10, radius = 500, wall = 500, sneeze = 25000, cx = 2400, cz = 0, name = "Big Barkley", hazard = "x",
   zones = { { name = "Snout", outer = 500 }, { name = "Drool Lake", outer = 360 }, { name = "Stomach", outer = 220 }, { name = "Brain", outer = 100 } }, outside = { 60, 40, 30 }, modifiers = { "Fog" } }
 Renderer.setDish(info)
@@ -265,6 +271,7 @@ Renderer.snapshot(buf)
 for gid in pairs(germs) do Renderer.power(tonumber(gid), powers[tonumber(gid) % #powers + 1]) end
 for i = 1, 30 do Renderer.update(0.1, 3 + i * 0.1) end
 print("gear ok")
+for i in ipairs(FlagsMod.SheetIds) do FlagsMod.SheetIds[i] = "" end
 -- effects
 for _, e in ipairs({
   { "Ink", { { x = 1, z = 2, r = 3 } } }, { "Warps", { { x = 1, z = 2, r = 3 }, { x = 1, z = 2, r = 3 } } }, { "Spikes", { { x = 1, z = 2, r = 3 } } },

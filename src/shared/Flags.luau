@@ -225,7 +225,7 @@ end
 for line in string.gmatch(DATA, "[^\n]+") do
 	local code, name, continent = string.match(line, "^(%u%u) ([^;]+);(%a+)$")
 	if code then
-		local f = { Code = code, Name = name, Continent = continent }
+		local f = { Code = code, Name = name, Continent = continent, Sheet = #Flags.List } -- 0-based, data order
 		table.insert(Flags.List, f)
 		Flags.ByCode[code] = f
 	end
@@ -233,5 +233,23 @@ end
 table.sort(Flags.List, function(a, b)
 	return a.Name < b.Name
 end)
+
+-- Sharp flag pictures: image sheets drawn by tools/flag-atlas.js (16 flags per 1024 px sheet,
+-- 4x4 cells of 256 px, in the data order above). The asset ids come from uploading those sheets;
+-- an empty id means "not uploaded yet" and the game falls back to the emoji.
+Flags.SheetIds = { "", "", "", "", "", "", "", "", "", "", "", "", "" }
+Flags.SheetCell = 256
+
+-- Returns image, ImageRectOffset, ImageRectSize for a flag's picture, or nil (use the emoji)
+function Flags.picture(code)
+	local f = Flags.ByCode[code]
+	local id = f and Flags.SheetIds[f.Sheet // 16 + 1]
+	if not id or id == "" then
+		return nil
+	end
+	local i = f.Sheet % 16
+	local cell = Flags.SheetCell
+	return id, Vector2.new((i % 4) * cell, (i // 4) * cell), Vector2.new(cell, cell)
+end
 
 return Flags

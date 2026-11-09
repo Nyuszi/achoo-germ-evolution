@@ -164,6 +164,7 @@ end
 
 local WHITE, BLACK = Color3.new(1, 1, 1), Color3.fromRGB(25, 25, 35)
 local LOOK_PAD = 2 -- the look billboard is this much bigger than the body, so hats fit
+local LOOK_CANVAS = 512 -- pixels across the look plate (the art is all in scale, any size works)
 local FLAG_BOX = 100 -- pixels: the flag emoji's box before it is scaled up to the body
 
 local function skinItem(cat, id)
@@ -329,14 +330,16 @@ local function buildVisual(cellId)
 		material = Enum.Material.Glass
 	end
 	v.baseTransparency = transparency
-	add(newPart(Enum.PartType.Ball, color, material, transparency), "body")
+	-- the body is a flat disc (a short cylinder standing on end) with the face painted on a
+	-- see-through plate lying right on its top: one flat layer, so the camera's perspective
+	-- never pulls the face away from the body, wherever the germ is on screen
+	add(newPart(Enum.PartType.Cylinder, color, material, transparency), "body")
+	add(newPart(Enum.PartType.Block, nil, nil, 1), "plate").Name = "LookPlate"
 	if npc == "antibody" then
 		-- a little Y shape
 		extra(newPart(Enum.PartType.Block, color, Enum.Material.Neon), Vector3.new(0.3, 0.3, 1.4), -0.5, 0.3, 0)
 		extra(newPart(Enum.PartType.Block, color, Enum.Material.Neon), Vector3.new(0.3, 0.3, 1.0), 0.6, 0.3, -0.4)
 		extra(newPart(Enum.PartType.Block, color, Enum.Material.Neon), Vector3.new(0.3, 0.3, 1.0), 0.6, 0.3, 0.4)
-	else
-		add(newPart(Enum.PartType.Ball, color:Lerp(BLACK, 0.35), Enum.Material.SmoothPlastic, 0.2), "nucleus")
 	end
 	-- mutations are flat 2D art on the look billboard (see Gear); only flat-lying cylinders here
 	for _, e in v.extras do
@@ -344,16 +347,16 @@ local function buildVisual(cellId)
 			e.flat = true
 		end
 	end
-	v.shield = add(newPart(Enum.PartType.Ball, Color3.fromRGB(150, 220, 255), Enum.Material.ForceField, 1))
+	v.shield = add(newPart(Enum.PartType.Cylinder, Color3.fromRGB(150, 220, 255), Enum.Material.ForceField, 1))
 
-	-- trail: a flat ribbon lying behind the germ (the body faces its movement, so the back is
-	-- local +Z). Its two ends sit at the back edge, one each side, so it is as wide as the germ.
+	-- trail: a flat ribbon lying behind the germ. Its two ends sit at the back edge, one each side,
+	-- so it is as wide as the germ (placed every frame in place(), on the unrotated plate).
 	local trail = skin.Trail or "None"
 	if TRAIL_COLORS[trail] then
 		local a0 = Instance.new("Attachment")
-		a0.Parent = v.body
+		a0.Parent = v.plate
 		local a1 = Instance.new("Attachment")
-		a1.Parent = v.body
+		a1.Parent = v.plate
 		local t = Instance.new("Trail")
 		t.Attachment0, t.Attachment1 = a0, a1
 		t.Color = ColorSequence.new(TRAIL_COLORS[trail][1], TRAIL_COLORS[trail][2])
@@ -365,7 +368,7 @@ local function buildVisual(cellId)
 		t.LightInfluence = 0 -- same colour on every floor
 		t.Brightness = 2
 		t.FaceCamera = false
-		t.Parent = v.body
+		t.Parent = v.plate
 		v.trail = { a0 = a0, a1 = a1, t = t }
 		v.trailKind = trail
 	end
@@ -392,16 +395,18 @@ local function buildVisual(cellId)
 		tag.Enabled = false
 	end
 	if npc ~= "antibody" then
-		-- the face, pattern and hat: flat 2D art (see Looks) on a billboard lying just above the
-		-- body, which the top-down camera sees face on. A flag skin turns the whole disc into the
-		-- flag (a round CanvasGroup clips a big flag emoji) with the face on top.
-		local lookGui = Instance.new("BillboardGui")
+		-- the face, pattern, hat and mutations: flat 2D art (see Looks, Gear) painted on the top
+		-- of the plate. A flag skin turns the whole disc into the flag with the face on top.
+		local lookGui = Instance.new("SurfaceGui")
 		lookGui.Name = "Look"
+		lookGui.Face = Enum.NormalId.Top
+		lookGui.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+		lookGui.CanvasSize = Vector2.new(LOOK_CANVAS, LOOK_CANVAS)
 		lookGui.AlwaysOnTop = false
 		lookGui.LightInfluence = 0
 		lookGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-		lookGui.Adornee = v.body
-		lookGui.Parent = v.body
+		lookGui.Adornee = v.plate
+		lookGui.Parent = v.plate
 		local root = Instance.new("Frame")
 		root.AnchorPoint = Vector2.new(0.5, 0.5)
 		root.Position = UDim2.fromScale(0.5, 0.5)
@@ -409,7 +414,25 @@ local function buildVisual(cellId)
 		root.BackgroundTransparency = 1
 		root.Parent = lookGui
 		local flag = skin.Flag and skin.Flag ~= "" and not npc
+		local flagImage, flagOffset, flagRect = nil, nil, nil
 		if flag then
+			flagImage, flagOffset, flagRect = Flags.picture(skin.Flag)
+		end
+		if flagImage then
+			-- a sharp flag picture from the flag sheets, cut round
+			local pic = Instance.new("ImageLabel")
+			pic.Size = UDim2.fromScale(1, 1)
+			pic.BackgroundColor3 = color
+			pic.Image = flagImage
+			pic.ImageRectOffset = flagOffset
+			pic.ImageRectSize = flagRect
+			pic.ScaleType = Enum.ScaleType.Stretch
+			pic.ZIndex = 0
+			pic.Parent = root
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0.5, 0)
+			c.Parent = pic
+		elseif flag then
 			local round = Instance.new("CanvasGroup")
 			round.Size = UDim2.fromScale(1, 1)
 			round.BackgroundColor3 = color
@@ -471,33 +494,16 @@ local function dropSlime(v, now, color)
 	table.insert(puddles, { part = p, t = 0 })
 end
 
--- The look billboard must lie just above the top of the body (or the ball hides it), but the
--- camera looks at it in perspective: straight up, a germ far from the middle of the screen gets
--- its face shifted outwards. So it is slid along the line from the body's centre to the camera
--- (it still covers exactly the centre) and shrunk by how much nearer it got.
-local function alignLook(v, cam)
-	local r = v.drawnR
-	local k = 0
-	if cam then
-		local dy = cam.Y - r
-		k = math.clamp(r * 1.03 / math.max(dy, r * 1.5), 0, 0.7)
-		v.lookGui.StudsOffsetWorldSpace = Vector3.new((cam.X - v.x) * k, dy * k, (cam.Z - v.z) * k)
-	else
-		v.lookGui.StudsOffsetWorldSpace = Vector3.new(0, r * 1.03, 0)
-	end
-	local size = r * 2 * LOOK_PAD * (1 - k)
-	if math.abs(size - (v.lookSize or 0)) > size * 0.004 then
-		v.lookSize = size
-		v.lookGui.Size = UDim2.fromScale(size, size)
-	end
+-- How thick the flat body disc is. Bigger germs are thicker, so they lie on top of smaller ones.
+local function thickness(r)
+	return 0.4 + r * 0.12
 end
 
 -- Sizes every part for radius r (only when the radius really changed)
 local function resize(v, r)
-	v.body.Size = Vector3.one * r * 2
-	if v.nucleus then
-		v.nucleus.Size = Vector3.one * r * 0.8
-	end
+	local th = thickness(r)
+	v.body.Size = Vector3.new(th, r * 2, r * 2)
+	v.plate.Size = Vector3.new(r * 2 * LOOK_PAD, 0.05, r * 2 * LOOK_PAD)
 	for _, e in v.extras do
 		local s = e.size * r
 		if e.flat then
@@ -505,17 +511,17 @@ local function resize(v, r)
 		end
 		e.part.Size = s
 	end
-	v.shield.Size = Vector3.one * r * 2.5
+	v.shield.Size = Vector3.new(th * 1.4, r * 2.5, r * 2.5)
 	if v.trail then
-		-- just outside the back of the ball, half way up (above any floor bumps)
-		v.trail.a0.Position = Vector3.new(-r * 0.5, 0, r * 0.9)
-		v.trail.a1.Position = Vector3.new(r * 0.5, 0, r * 0.9)
 		v.trail.t.Lifetime = math.clamp(0.5 + r * 0.03, 0.5, 2.5) -- big germs are slow: a longer tail
 	end
 	v.drawnR = r
 end
 
 local FLAT = CFrame.Angles(0, 0, math.rad(90)) -- cylinders stand upright
+-- the plate is turned so its SurfaceGui reads upright for the camera (screen up = world -Z;
+-- checked in Studio)
+local PLATE_TURN = CFrame.Angles(0, math.rad(-90), 0)
 
 -- Positions every part of one germ cell. Adds parts and CFrames to the bulk lists.
 local function place(v, partsOut, cframesOut, t)
@@ -528,9 +534,16 @@ local function place(v, partsOut, cframesOut, t)
 		table.insert(partsOut, p)
 		table.insert(cframesOut, CFrame.new(pos) * (rot or look))
 	end
-	put(v.body, Vector3.new(x, r, z))
-	if v.nucleus then
-		put(v.nucleus, Vector3.new(x - fx * r * 0.2, r * 1.25, z - fz * r * 0.2))
+	local th = thickness(v.drawnR > 0 and v.drawnR or r)
+	put(v.body, Vector3.new(x, th / 2, z), FLAT)
+	put(v.plate, Vector3.new(x, th + 0.04, z), PLATE_TURN)
+	if v.trail then
+		-- the back edge, one end each side (plate space: x = world -z, z = world x after the turn)
+		local bx, bz = -fx * r * 0.9, -fz * r * 0.9
+		local sx, sz = rx * r * 0.5, rz * r * 0.5
+		local y = -th * 0.5
+		v.trail.a0.Position = PLATE_TURN:PointToObjectSpace(Vector3.new(bx - sx, y, bz - sz))
+		v.trail.a1.Position = PLATE_TURN:PointToObjectSpace(Vector3.new(bx + sx, y, bz + sz))
 	end
 	for _, e in v.extras do
 		local f, rr = e.fwd, e.right
@@ -538,9 +551,9 @@ local function place(v, partsOut, cframesOut, t)
 		if e.flat then
 			rot = rot * FLAT
 		end
-		put(e.part, Vector3.new(x + (fx * f + rx * rr) * r, r + e.up * r, z + (fz * f + rz * rr) * r), rot)
+		put(e.part, Vector3.new(x + (fx * f + rx * rr) * r, th + e.up * r, z + (fz * f + rz * rr) * r), rot)
 	end
-	put(v.shield, Vector3.new(x, r, z))
+	put(v.shield, Vector3.new(x, th / 2, z), FLAT)
 end
 
 -- Dish and snapshots ------------------------------------------------------------------------
@@ -669,8 +682,6 @@ end
 -- Called every frame
 function Renderer.update(dt, t)
 	local parts, cframes = {}, {}
-	local camCf = workspace.CurrentCamera and workspace.CurrentCamera.CFrame
-	local cam = camCf and camCf.Position
 	local k = 1 - math.exp(-14 * dt)
 	for id, s in latest do
 		local v = Renderer.cells[id]
@@ -793,9 +804,6 @@ function Renderer.update(dt, t)
 				v.label.Text = text
 			end
 			place(v, parts, cframes, t)
-			if v.lookGui and v.lookGui.Enabled ~= false then
-				alignLook(v, cam)
-			end
 		end
 	end
 	-- swallowed cells fly into the eater and shrink; eaten food gets sucked in
@@ -817,9 +825,6 @@ function Renderer.update(dt, t)
 			v.r = math.max(0.05, d.r * (1 - p))
 			resize(v, v.r)
 			place(v, parts, cframes, t)
-			if v.lookGui then
-				alignLook(v, cam)
-			end
 		end
 	end
 	for i = #sucking, 1, -1 do
@@ -836,7 +841,7 @@ function Renderer.update(dt, t)
 		else
 			local e = p * p
 			s.part.Size = Vector3.one * math.max(0.05, s.d * (1 - p * 0.8))
-			s.part.CFrame = CFrame.new(s.x + (v.x - s.x) * e, s.y + (v.r - s.y) * e, s.z + (v.z - s.z) * e)
+			s.part.CFrame = CFrame.new(s.x + (v.x - s.x) * e, s.y + (thickness(v.r) - s.y) * e, s.z + (v.z - s.z) * e)
 		end
 	end
 	updateBits(dt)
