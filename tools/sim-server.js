@@ -7,6 +7,8 @@ const path = require("path");
 const { lua, lauxlib, lualib, to_luastring } = require("fengari");
 
 const minutes = Number(process.argv[2] || 10);
+// DUMP_AT=1,5,12 prints the full world state (JSON after "DUMP ") at those minutes (tools/render-preview.js draws it)
+const dumpAt = process.env.DUMP_AT || "";
 const src = path.join(__dirname, "..", "src");
 const read = (p) => fs.readFileSync(path.join(src, p), "utf8");
 
@@ -88,6 +90,7 @@ script.Parent.Config = { __name = "Config" }
 const wrap = (name, code) => `__define(${JSON.stringify(name)}, function()\n${toLua(code)}\nend)\n`;
 
 const run = `
+DUMP_AT = ${JSON.stringify(dumpAt)}
 local Config = require("Config")
 local Formulas = require("Formulas")
 local World = require("World")
@@ -119,10 +122,40 @@ local total = ${minutes} * 60
 local nextReport = 60
 local thinkAt = 0
 local bubbleRule = 0
+local dumps = {}
+for m in string.gmatch(DUMP_AT or "", "[^,]+") do table.insert(dumps, tonumber(m) * 60) end
+local function dump()
+  local out = {}
+  local function col(c) return string.format("[%d,%d,%d]", c[1], c[2], c[3]) end
+  table.insert(out, string.format('{"t":%.1f,"probe":%d,"cells":[', SIMTIME, probe.id))
+  local first = true
+  for _, g in pairs(World.allGerms()) do
+    if g.alive then
+      local muts = {}
+      for slot, id in pairs(g.equipped) do table.insert(muts, string.format('"%s":"%s"', slot, id)) end
+      for _, c in pairs(g.cells) do
+        table.insert(out, string.format('%s{"g":%d,"x":%.2f,"z":%.2f,"s":%.2f,"name":"%s","color":%s,"muts":{%s},"crown":%s,"prot":%s,"fight":%s}',
+          first and "" or ",", g.id, c.x, c.z, c.size, g.name, col(g.color), table.concat(muts, ","), tostring(World.crowned == g), tostring(World.isProtected(g)), tostring(c.fighting == true)))
+        first = false
+      end
+    end
+  end
+  table.insert(out, '],"food":[')
+  local fl = World.foodList()
+  local parts = {}
+  for i = 1, #fl, 5 do table.insert(parts, string.format("[%.1f,%.1f,%.2f,%d]", fl[i+1], fl[i+2], fl[i+3], fl[i+4])) end
+  table.insert(out, table.concat(parts, ","))
+  table.insert(out, '],"bubbles":[')
+  local bs = {}
+  for _, b in ipairs(World.bubbles) do table.insert(bs, string.format("[%.1f,%.1f]", b.x, b.z)) end
+  table.insert(out, table.concat(bs, ",") .. "]}")
+  print("DUMP " .. table.concat(out))
+end
 while SIMTIME < total do
   SIMTIME = SIMTIME + step
   __heartbeat(step)
   __resume()
+  if dumps[1] and SIMTIME >= dumps[1] then table.remove(dumps, 1); dump() end
   -- drive the probe like a bot
   if SIMTIME >= thinkAt then
     thinkAt = SIMTIME + 0.25
