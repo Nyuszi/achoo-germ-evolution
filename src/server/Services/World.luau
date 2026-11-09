@@ -985,9 +985,10 @@ local function interact(dish, dt)
 							separate(a, b, dist, 0.5)
 						end
 					elseif ga.npc or gb.npc then
-						if ga.npc and not gb.npc then
+						-- (a germ hiding in a thorn bush is safe from the immune system too)
+						if ga.npc and not gb.npc and not b.sheltered then
 							bossContact(a, b, dt)
-						elseif gb.npc and not ga.npc then
+						elseif gb.npc and not ga.npc and not a.sheltered then
 							bossContact(b, a, dt)
 						end
 						if cells[a.id] and cells[b.id] then

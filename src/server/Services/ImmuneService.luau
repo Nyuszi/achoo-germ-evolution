@@ -292,6 +292,20 @@ function ImmuneService.start()
 	DishService.onRemoved(function(dish)
 		acc[dish] = nil
 	end)
+	-- someone arriving in the middle of a Fever or Medicine sees it too
+	DishService.onEnter(function(player, dish)
+		local t = dish.timers
+		if not t then
+			return
+		end
+		local now = World.now()
+		if t.feverEnd and now < t.feverEnd then
+			Net.DishFx:FireClient(player, "Fever", { duration = t.feverEnd - now })
+		end
+		if t.medicineEnd and now < t.medicineEnd then
+			Net.DishFx:FireClient(player, "Medicine", { wall = dish.wallTarget, duration = t.medicineEnd - now })
+		end
+	end)
 end
 
 return ImmuneService
