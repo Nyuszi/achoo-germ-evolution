@@ -655,6 +655,7 @@ function World.ability(germ, slot)
 			World.addEffect(germ, "GravityWell", 2)
 		end
 	end
+	World.fireDish(germ.dish, Net.DishFx, "Power", { id = germ.id, kind = active.id }) -- clients animate it
 	return true
 end
 

@@ -11,6 +11,7 @@ local Formulas = require(ReplicatedStorage.Shared.Formulas)
 local Flags = require(ReplicatedStorage.Shared.Flags)
 local Ui = require(script.Parent.Ui)
 local Looks = require(script.Parent.Looks)
+local Gear = require(script.Parent.Gear)
 
 local Menus = {}
 
@@ -30,6 +31,28 @@ end
 
 local function fmt(n)
 	return Formulas.formatNumber(n)
+end
+
+-- A little germ drawn like in the game: a disc of the body colour with the face, pattern and hat
+-- (Looks) on top. With a flag, the disc is the flag. size = the disc's width in pixels.
+local function germPicture(parent, size, skin, pos, muts, core)
+	local c = skin.Color or { 120, 220, 120 }
+	local color = Color3.fromRGB(c[1], c[2], c[3])
+	local flag = skin.Flag ~= nil and skin.Flag ~= ""
+	local disc = make(flag and "CanvasGroup" or "Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundColor3 = color, ZIndex = 1, Parent = parent }, { Ui.corner(size / 2) })
+	if flag then
+		text({ Size = UDim2.fromScale(2.1, 2.1), Position = UDim2.fromScale(-0.55, -0.55), Text = Flags.emoji(skin.Flag), Parent = disc })
+		disc = make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundTransparency = 1, ZIndex = 2, Parent = parent }, { Ui.corner(size / 2) })
+	end
+	-- a soft outline, like the body's rim in the game
+	make("UIStroke", { Thickness = math.max(1, size / 30), Color = color:Lerp(Color3.new(0, 0, 0), 0.45), Transparency = 0.2, Parent = disc })
+	Looks.build(disc, { skin = skin, color = color, flag = flag })
+	-- Lab mutations, swimming up the screen (front at the top)
+	local gear = muts and Gear.build(disc, muts, color, core)
+	if gear then
+		Gear.animate(gear, 0, 0.3, { dx = 0, dz = -1 })
+	end
+	return disc
 end
 
 -- Lab ---------------------------------------------------------------------------------------------
@@ -72,6 +95,14 @@ local function equippedIn(id)
 	return false
 end
 
+-- a row picture: a plain germ in your colour wearing these mutations
+local function labPicture(muts, core)
+	return function(box)
+		local c = profile.Skin.Color or { 120, 220, 120 }
+		germPicture(box, 30, { Color = c, Eyes = "Cute", Mouth = "Smile" }, UDim2.fromScale(0.5, 0.55), muts, core)
+	end
+end
+
 local confirmSlot = nil -- a New Run that would wipe a strain needs a second tap
 local refreshLab
 function refreshLab()
@@ -87,6 +118,13 @@ function refreshLab()
 		return n
 	end
 	local lim = Formulas.hostLimits(profile.Host)
+	if tab == "Mutations" or tab == "Fusions" or tab == "Cores" then
+		-- your germ with everything it wears now
+		local top = make("Frame", { Size = UDim2.new(1, -10, 0, 128), BackgroundColor3 = Ui.ROW, LayoutOrder = nextN(), ZIndex = 12, Parent = lab.list }, { Ui.corner(10) })
+		germPicture(top, 64, profile.Skin, UDim2.new(0, 70, 0.52, 0), profile.Equipped, profile.Core)
+		text({ Size = UDim2.new(1, -150, 0, 30), Position = UDim2.new(0, 135, 0, 20), Text = "Your germ", ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = top })
+		text({ Size = UDim2.new(1, -150, 0, 44), Position = UDim2.new(0, 135, 0, 56), Text = "Swimming up. In the game your mutations move: jaws chew, tails whip, jets flame, and abilities show.", TextWrapped = true, TextScaled = true, ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(215, 205, 230), Parent = top })
+	end
 	if tab == "Mutations" then
 		local hostName = Config.Hosts[profile.Host].Name
 		heading(lab.list, nextN(), "In " .. hostName .. ": " .. lim.slots .. (lim.slots == 1 and " slot" or " slots") .. ", levels up to " .. lim.levelCap
@@ -129,7 +167,7 @@ function refreshLab()
 						end })
 					end
 					local stars = string.rep("●", level) .. string.rep("○", Config.MaxMutationLevel - level)
-					row(lab.list, nextN(), m.Name .. "  " .. stars, statText(id, level), buttons)
+					row(lab.list, nextN(), m.Name .. "  " .. stars, statText(id, level), buttons, labPicture({ [slot] = id }))
 				end
 			end
 		end
@@ -153,7 +191,7 @@ function refreshLab()
 				{ label, (owned or ready) and Ui.GOOD or Ui.GREY, function()
 					call("Lab", owned and "Equip" or "Fuse", id)
 				end },
-			})
+			}, labPicture({ Front = id, Back = "#" .. id }))
 		end
 	elseif tab == "Cores" then
 		heading(lab.list, nextN(), "Your germ's body shape. Unlock one by reaching its host")
@@ -265,22 +303,6 @@ local function ownsSkin(cat, id)
 	return false
 end
 
--- A little germ drawn like in the game: a disc of the body colour with the face, pattern and hat
--- (Looks) on top. With a flag, the disc is the flag. size = the disc's width in pixels.
-local function germPicture(parent, size, skin, pos)
-	local c = skin.Color or { 120, 220, 120 }
-	local color = Color3.fromRGB(c[1], c[2], c[3])
-	local flag = skin.Flag ~= nil and skin.Flag ~= ""
-	local disc = make(flag and "CanvasGroup" or "Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundColor3 = color, ZIndex = 1, Parent = parent }, { Ui.corner(size / 2) })
-	if flag then
-		text({ Size = UDim2.fromScale(2.1, 2.1), Position = UDim2.fromScale(-0.55, -0.55), Text = Flags.emoji(skin.Flag), Parent = disc })
-		disc = make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos, BackgroundTransparency = 1, ZIndex = 2, Parent = parent }, { Ui.corner(size / 2) })
-	end
-	-- a soft outline, like the body's rim in the game
-	make("UIStroke", { Thickness = math.max(1, size / 30), Color = color:Lerp(Color3.new(0, 0, 0), 0.45), Transparency = 0.2, Parent = disc })
-	Looks.build(disc, { skin = skin, color = color, flag = flag })
-	return disc
-end
 
 -- The player's look with one item swapped in
 local function withItem(cat, id)

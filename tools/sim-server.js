@@ -67,7 +67,7 @@ end
 -- fake remotes: one table per name so the sim can call OnServerInvoke
 local remotes = {}
 local Net = setmetatable({ notify = function(p, text) if p.log then p.log(text) end end }, { __index = function(t, k)
-  local r = { FireAllClients = noop, FireClient = function(self, player, ...) if player and player.onRemote then player.onRemote(k, ...) end end, OnServerEvent = signal() }
+  local r = { FireAllClients = noop, FireClient = function(self, player, ...) if k == "DishFx" and select(1, ...) == "Power" then POWERS = (POWERS or 0) + 1 end if player and player.onRemote then player.onRemote(k, ...) end end, OnServerEvent = signal() }
   rawset(t, k, r)
   return r
 end })
@@ -269,6 +269,12 @@ while SIMTIME < total do
       { "Dev", "ArenaFloor" }, { "Dev", "ArenaFloor" }, { "Dev", "SneezeSize" }, { "Arena", "Leave" }, { "Dev", "Reset" },
     }
     local c = list[exerciseI]
+    -- abilities (Chomp after Jaws is on; the Front slot holds the Drill later: Pierce)
+    if exerciseI == 4 or exerciseI == 12 then
+      local before = POWERS or 0
+      for _, f in ipairs(NET.Action.OnServerEvent) do f(p, "Front") end
+      print(string.format("%5.1fs  ability Front -> Power events sent %d", SIMTIME, (POWERS or 0) - before))
+    end
     if c then
       local args = {}
       for i = 2, #c do args[i - 1] = type(c[i]) == "table" and "{...}" or tostring(c[i]) end

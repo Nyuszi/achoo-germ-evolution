@@ -583,10 +583,10 @@ function Looks.build(root, look)
 		pattern(group(root, "Pattern", 1), c2, color)
 	end
 	-- glossy shine (on flags too)
-	local shine = group(root, "Shine", 2)
+	local shine = group(root, "Shine", 3)
 	box(shine, 0.33, 0.24, 0.3, 0.15, WHITE, { rot = -35, t = 0.62 })
 	circle(shine, 0.19, 0.37, 0.05, WHITE, { t = 0.5 })
-	local face = group(root, "Face", 3)
+	local face = group(root, "Face", 4)
 	local open = group(face, "Open", 1)
 	local closed = group(face, "Closed", 2)
 	closed.Visible = false
@@ -608,7 +608,7 @@ function Looks.build(root, look)
 	if hat then
 		-- grown around the top rim of the disc (y = 0.05), so it stays sitting on the head
 		local k = HAT_SCALE[skin.Hat] or 1.4
-		local g = group(root, "Hat", 5)
+		local g = group(root, "Hat", 6)
 		g.Size = UDim2.fromScale(k, k)
 		g.Position = UDim2.fromScale(0.5, 0.05 + 0.45 * k)
 		hat(g, color)

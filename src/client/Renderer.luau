@@ -8,6 +8,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Formulas = require(ReplicatedStorage.Shared.Formulas)
 local Flags = require(ReplicatedStorage.Shared.Flags)
 local Looks = require(script.Parent.Looks)
+local Gear = require(script.Parent.Gear)
 
 local Renderer = {}
 
@@ -34,6 +35,9 @@ local foodAt = {} -- [foodId] = { x, y, z, d } (where each pellet is drawn)
 local latest = {} -- [cellId] = { x, z, size, flags }
 local sucking = {} -- food being sucked into a germ: { part, x, z, d, cell, t }
 local dying = {} -- cells being swallowed (or fading out): { v, eater, t, r }
+local puddles = {} -- slime left on the floor by the Slime mutation: { part, t }
+local freePuddles = {}
+local PUDDLE_TIME = 2.4
 local SUCK_TIME, GULP_TIME = 0.16, 0.24
 
 local function newPart(shape, color, material, transparency, parent)
@@ -113,7 +117,7 @@ local function eaterNear(x, z)
 		if v.x and v.info.npc ~= "antibody" then
 			local dx, dz = v.x - x, v.z - z
 			local d = math.sqrt(dx * dx + dz * dz) - v.r
-			if d < bestD and d < 10 then
+			if d < bestD and d < 16 then -- magnets and suction pull food from a way off
 				best, bestD = id, d
 			end
 		end
@@ -228,63 +232,7 @@ local function buildVisual(cellId)
 	else
 		add(newPart(Enum.PartType.Ball, color:Lerp(BLACK, 0.35), Enum.Material.SmoothPlastic, 0.2), "nucleus")
 	end
-	-- mutations
-	local muts = info.muts or {}
-	local function has(slot, id)
-		local m = muts[slot]
-		if m == id then
-			return true
-		end
-		local f = m and Config.Fusions[(string.gsub(m, "^#", ""))]
-		return f ~= nil and table.find(f.Parts, id) ~= nil
-	end
-	local bone = Color3.fromRGB(245, 245, 230)
-	if has("Front", "Jaws") then
-		v.jaws = {
-			extra(newPart(Enum.PartType.Block, bone), Vector3.new(0.25, 0.3, 0.55), 1.0, 0, -0.2),
-			extra(newPart(Enum.PartType.Block, bone), Vector3.new(0.25, 0.3, 0.55), 1.0, 0, 0.2),
-		}
-	end
-	if has("Front", "Suction") then
-		extra(newPart(Enum.PartType.Cylinder, color:Lerp(Color3.fromRGB(255, 120, 150), 0.5)), Vector3.new(0.3, 0.7, 0.7), 1.0, 0, 0)
-	end
-	if has("Front", "Drill") then
-		extra(newPart(Enum.PartType.Block, Color3.fromRGB(170, 170, 185), Enum.Material.DiamondPlate), Vector3.new(0.3, 0.3, 0.8), 1.15, 0, 0)
-	end
-	if has("Back", "Flagella") then
-		v.tail = extra(newPart(Enum.PartType.Block, color:Lerp(BLACK, 0.2)), Vector3.new(0.18, 0.12, 1.3), -1.35, 0, 0)
-	end
-	if has("Back", "Jet") then
-		extra(newPart(Enum.PartType.Cylinder, Color3.fromRGB(255, 160, 60), Enum.Material.Neon), Vector3.new(0.3, 0.35, 0.35), -1.05, 0, -0.3)
-		extra(newPart(Enum.PartType.Cylinder, Color3.fromRGB(255, 160, 60), Enum.Material.Neon), Vector3.new(0.3, 0.35, 0.35), -1.05, 0, 0.3)
-	end
-	if has("Back", "Slime") then
-		extra(newPart(Enum.PartType.Ball, Color3.fromRGB(120, 230, 90), Enum.Material.Glass, 0.4), Vector3.one * 0.7, -1.1, -0.3, 0)
-	end
-	if has("Sides", "Spikes") or info.core == "Star" then
-		v.spikes = {}
-		for i = 1, 8 do
-			local a = (i / 8) * math.pi * 2
-			table.insert(v.spikes, extra(newPart(Enum.PartType.Block, color:Lerp(BLACK, 0.45)), Vector3.new(0.22, 0.22, 0.6), math.cos(a) * 1.05, 0, math.sin(a) * 1.05, a))
-		end
-	end
-	if has("Sides", "Toxin") then
-		for i = 1, 4 do
-			local a = (i / 4) * math.pi * 2 + 0.4
-			extra(newPart(Enum.PartType.Ball, Color3.fromRGB(150, 255, 80), Enum.Material.Neon), Vector3.one * 0.25, math.cos(a) * 0.95, 0.2, math.sin(a) * 0.95)
-		end
-	end
-	if has("Sides", "Shell") then
-		v.shell = add(newPart(Enum.PartType.Ball, Color3.fromRGB(170, 170, 185), Enum.Material.Slate, 0.55))
-	end
-	if has("Special", "Magnet") then
-		extra(newPart(Enum.PartType.Block, Color3.fromRGB(230, 60, 60)), Vector3.new(0.25, 0.4, 0.25), 0, 1.0, -0.2)
-		extra(newPart(Enum.PartType.Block, Color3.fromRGB(60, 90, 230)), Vector3.new(0.25, 0.4, 0.25), 0, 1.0, 0.2)
-	end
-	if has("Special", "Sneezer") then
-		extra(newPart(Enum.PartType.Ball, color:Lerp(Color3.fromRGB(255, 120, 120), 0.5)), Vector3.one * 0.3, 0.95, 0.55, 0)
-	end
-	-- the parts above are rotated so cylinders lie flat
+	-- mutations are flat 2D art on the look billboard (see Gear); only flat-lying cylinders here
 	for _, e in v.extras do
 		if e.part.Shape == Enum.PartType.Cylinder then
 			e.flat = true
@@ -384,12 +332,31 @@ local function buildVisual(cellId)
 			lookSkin = { Eyes = "Angry", Mouth = "Fangs" }
 		end
 		v.look = Looks.build(root, { skin = lookSkin, color = color, flag = flag })
+		v.gear = Gear.build(root, info.muts or {}, color, info.core)
+		v.gearState = {}
 		v.lookGui = lookGui
 		v.blinkAt = os.clock() + 1 + math.random() * 4
-		v.lift = 0.8 -- 3D bits on top of the body (magnet, toxin...) poke out above the look
 	end
 	model.Parent = germFolder
 	return v
+end
+
+-- The Slime mutation leaves a fading trail of goo puddles behind the germ
+local function dropSlime(v, now, color)
+	if now < (v.slimeAt or 0) then
+		return
+	end
+	local dx, dz = v.x - (v.slimeX or 1e9), v.z - (v.slimeZ or 1e9)
+	if dx * dx + dz * dz < (v.r * 0.4) ^ 2 then
+		return
+	end
+	v.slimeAt, v.slimeX, v.slimeZ = now + 0.15, v.x, v.z
+	local p = table.remove(freePuddles) or newPart(Enum.PartType.Cylinder, color, Enum.Material.Glass, 1, germFolder)
+	p.Color = color
+	p.Size = Vector3.new(0.15, v.r * 1.3, v.r * 1.3)
+	p.CFrame = CFrame.new(v.x - v.dirX * v.r * 0.9, 0.1, v.z - v.dirZ * v.r * 0.9) * CFrame.Angles(0, 0, math.rad(90))
+	p.Transparency = 0.35
+	table.insert(puddles, { part = p, t = 0 })
 end
 
 -- Sizes every part for radius r (only when the radius really changed)
@@ -404,9 +371,6 @@ local function resize(v, r)
 			s = Vector3.new(s.X, s.Y, s.Z)
 		end
 		e.part.Size = s
-	end
-	if v.shell then
-		v.shell.Size = Vector3.one * r * 2.15
 	end
 	v.shield.Size = Vector3.one * r * 2.5
 	if v.lookGui then
@@ -442,30 +406,10 @@ local function place(v, partsOut, cframesOut, t)
 	for _, e in v.extras do
 		local f, rr = e.fwd, e.right
 		local rot = look
-		if e.spin then
-			-- spikes go round the body
-			local a = e.spin + t * 0.6
-			f, rr = math.cos(a) * 1.05, math.sin(a) * 1.05
-			rot = CFrame.lookAt(Vector3.zero, Vector3.new(fx * math.cos(a) + rx * math.sin(a), 0, fz * math.cos(a) + rz * math.sin(a)))
-		end
-		if e.part == v.tail then
-			local wiggle = math.sin(t * 12) * 0.35
-			rot = CFrame.lookAt(Vector3.zero, Vector3.new(fx + rx * wiggle, 0, fz + rz * wiggle))
-		elseif v.jaws and (e.part == v.jaws[1] or e.part == v.jaws[2]) then
-			local chomp = 0.15 + math.abs(math.sin(t * 8)) * 0.15
-			rr = (e.part == v.jaws[1]) and -chomp or chomp
-		end
 		if e.flat then
 			rot = rot * FLAT
 		end
-		local up = e.up
-		if v.lift and up >= 0.2 then
-			up += v.lift
-		end
-		put(e.part, Vector3.new(x + (fx * f + rx * rr) * r, r + up * r, z + (fz * f + rz * rr) * r), rot)
-	end
-	if v.shell then
-		put(v.shell, Vector3.new(x, r, z))
+		put(e.part, Vector3.new(x + (fx * f + rx * rr) * r, r + e.up * r, z + (fz * f + rz * rr) * r), rot)
 	end
 	put(v.shield, Vector3.new(x, r, z))
 end
@@ -480,6 +424,11 @@ local function clearAll()
 		d.v.model:Destroy()
 	end
 	dying = {}
+	for _, pd in puddles do
+		pd.part.Transparency = 1
+		table.insert(freePuddles, pd.part)
+	end
+	puddles = {}
 	for _, s in sucking do
 		hideFood(s.part)
 	end
@@ -664,6 +613,22 @@ function Renderer.update(dt, t)
 				if v.look.spin then
 					v.look.spin.Rotation = (t * 720) % 360
 				end
+				if v.gear and (not hidden or mine) then
+					-- mutations: face the swim direction and show what they do
+					local st = v.gearState
+					st.dx, st.dz = v.dirX, v.dirZ
+					st.fight = bit(flags, FLAG_FIGHT)
+					st.dash = bit(flags, FLAG_DASH)
+					if v.power and now - v.powerAt < 3.5 then
+						st.power, st.powerAge = v.power, now - v.powerAt
+					else
+						v.power, st.power, st.powerAge = nil, nil, nil
+					end
+					Gear.animate(v.gear, dt, t, st)
+					if v.gear.slimeColor and not hidden then
+						dropSlime(v, now, v.gear.slimeColor)
+					end
+				end
 			end
 			if bit(flags, FLAG_POISON) then
 				v.body.Color = v.info.color:Lerp(Color3.fromRGB(120, 255, 60), 0.4 + math.sin(t * 6) * 0.2)
@@ -729,8 +694,30 @@ function Renderer.update(dt, t)
 			s.part.CFrame = CFrame.new(s.x + (v.x - s.x) * e, s.y + (v.r - s.y) * e, s.z + (v.z - s.z) * e)
 		end
 	end
+	for i = #puddles, 1, -1 do
+		local pd = puddles[i]
+		pd.t += dt
+		if pd.t >= PUDDLE_TIME then
+			pd.part.Transparency = 1
+			table.insert(freePuddles, pd.part)
+			table.remove(puddles, i)
+		else
+			pd.part.Transparency = 0.35 + 0.65 * (pd.t / PUDDLE_TIME)
+		end
+	end
 	if #parts > 0 then
 		workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
+	end
+end
+
+-- A germ used its ability (Chomp, Vacuum, Pierce, Gravity well, Blast...): its gear shows it
+function Renderer.power(germId, kind)
+	local now = os.clock()
+	for cellId, gid in Renderer.cellGerm do
+		local v = gid == germId and Renderer.cells[cellId]
+		if v then
+			v.power, v.powerAt = kind, now
+		end
 	end
 end
 

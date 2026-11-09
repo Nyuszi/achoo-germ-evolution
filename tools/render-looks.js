@@ -65,6 +65,40 @@ sheets.push({ file: "skins-3-bundles-colours", title: "Bundles and colours", sec
   section("Colours are free: any colour, plus a 2nd colour for patterns", [[120, 220, 120], [110, 200, 255], [255, 150, 200], [255, 210, 90], [190, 140, 255], [255, 140, 100], [60, 60, 70], [255, 255, 255]].map((c, i) =>
     cell(["Mint", "Sky", "Pink", "Sun", "Lilac", "Peach", "Ink", "Snow"][i], look({ Pattern: "Spots", Color2: i === 7 ? [80, 80, 90] : [255, 255, 255] }, c), "Free"))),
 ] });
+// Lab mutations: the real Gear art (src/client/Gear.luau), resting and in action. Swimming up.
+const UP = { dx: 0, dz: -1, t: 0.3 };
+const act = (o) => Object.assign({}, UP, o);
+const MUTS = [
+  ["Jaws", "Front", "Jaws", "chews", act({ power: "Chomp", powerAge: 0.17 }), "Chomp: wide snap"],
+  ["Suction", "Front", "Suction Mouth", "food drifts in", act({ power: "Vacuum", powerAge: 0.5 }), "Vacuum: big vortex"],
+  ["Drill", "Front", "Drill Nose", "spins", act({ power: "Pierce", powerAge: 0.5 }), "Pierce: red hot"],
+  ["Flagella", "Back", "Flagella Tail", "whips", act({ dash: true, t: 0.41 }), "dashing: fast whip"],
+  ["Jet", "Back", "Jet Sac", "small flames", act({ dash: true }), "dashing: long flames"],
+  ["Slime", "Back", "Slime Trail", "drips goo", act({ t: 0.75 }), "leaves puddles"],
+  ["Spikes", "Sides", "Spikes", "turn slowly", act({ fight: true }), "in a fight: red tips"],
+  ["Toxin", "Sides", "Toxin Glands", "leak bubbles", act({ fight: true, t: 0.5 }), "in a fight: throbbing"],
+  ["Shell", "Sides", "Shell Plates", "riveted steel", act({ fight: true, t: 0.157 }), "hit: plates flash"],
+  ["Camo", "Special", "Camo Skin", "leafy blotches", act({ power: "Ghost", powerAge: 0.5 }), "Ghost hides you"],
+  ["Magnet", "Special", "Magnet Core", "ripples pull food", act({ power: "GravityWell", powerAge: 0.3 }), "Gravity well"],
+  ["Sneezer", "Special", "Mini Sneeze", "twitchy nose", act({ power: "Blast", powerAge: 0.22 }), "Blast: shock rings"],
+];
+const labLook = (muts, gear, color, core) => ({ color: color || [110, 200, 255], skin: Object.assign({}, base), muts, gear, core });
+sheets.push({ file: "lab-1-mutations", title: "Lab mutations on your germ (swimming up)", gear: true, sections: [
+  section("Front, Back, Sides and Special: resting, then in action", MUTS.flatMap(([id, slot, name, idle, a, action]) => [
+    cell(name, labLook({ [slot]: id }, UP), idle), cell(name, labLook({ [slot]: id }, a), action)])),
+] });
+const FUS = [["Buzzsaw", act({ dash: true }), "spins hard when dashing"], ["PlagueTrail", act({ t: 0.75 }), "purple poison goo"], ["BlackHole", act({ power: "Vacuum", powerAge: 0.5 }), "one dark vortex mouth"],
+  ["Ninja", act({ dash: true }), "camo + jets"], ["Fortress", act({ fight: true, t: 0.157 }), "shell + spikes"], ["Driller", act({ dash: true }), "dash: drill glows"],
+  ["Venom", act({ power: "Chomp", powerAge: 0.17 }), "green venom teeth"], ["Storm", act({ power: "Blast", powerAge: 0.22 }), "blast + gravity well"]];
+sheets.push({ file: "lab-2-fusions-and-mix", title: "Fusions, and a fully kitted germ", gear: true, sections: [
+  section("Fusions (in action)", FUS.map(([id, a, txt]) => cell(id, labLook({ Front: id, Back: "#" + id }, a, [255, 150, 200]), txt))),
+  section("All four slots", [
+    cell("Jaws, Jet, Spikes, Magnet", labLook({ Front: "Jaws", Back: "Jet", Sides: "Spikes", Special: "Magnet" }, act({ dx: 0.8, dz: -0.6 }), [255, 210, 90]), "swimming up-right"),
+    cell("Drill, Flagella, Toxin, Sneezer", labLook({ Front: "Drill", Back: "Flagella", Sides: "Toxin", Special: "Sneezer" }, act({ dx: -1, dz: 0 }), [190, 140, 255]), "swimming left"),
+    cell("Suction, Slime, Shell, Camo", labLook({ Front: "Suction", Back: "Slime", Sides: "Shell", Special: "Camo" }, act({ dx: 0, dz: 1 }), [120, 220, 120]), "swimming down"),
+    cell("Star core", labLook({}, UP, [255, 140, 100], "Star"), "built-in spikes"),
+  ]),
+] });
 const popular = ["HU", "US", "GB", "DE", "FR", "BR", "JP", "KR", "MX", "CA", "IN", "IT", "ES", "PH", "ID", "AU", "PL", "TR", "UA", "NL", "SE", "AR", "NG", "EG"];
 sheets.push({ file: "flags-1-popular", title: "Flag skins: the flag becomes the whole body (49 R$ each)", sections: [
   section("Popular flags", popular.map((c) => cell(flagList.find((f) => f.code === c).name, look({}, GREEN, emoji(c)), "49 R$"))),
@@ -99,7 +133,7 @@ for (const sec of S.sections) {
     const g = cv.getContext("2d"); g.scale(2, 2);
     const hasTrail = it.look.skin.Trail && it.look.skin.Trail !== "None";
     const hatted = it.look.skin.Hat && it.look.skin.Hat !== "None";
-    const cx = size / 2, cy = hasTrail ? size * 0.36 : size / 2 + (hatted ? size * 0.08 : 0), r = size * (S.compact ? 0.38 : hatted ? 0.28 : 0.31);
+    const cx = size / 2, cy = S.gear ? size / 2 : hasTrail ? size * 0.36 : size / 2 + (hatted ? size * 0.08 : 0), r = size * (S.gear ? 0.27 : S.compact ? 0.38 : hatted ? 0.28 : 0.31);
     drawGerm(g, cx, cy, r, it.look, 0.3);
     st.appendChild(cv);
     lookOverlay(st, cx, cy, r, TREES[it.tree]);
@@ -113,7 +147,7 @@ for (const sec of S.sections) {
 
 (async () => {
   const browser = await chromium.launch();
-  for (const sheet of sheets) {
+  for (const sheet of sheets.filter((s) => !process.env.ONLY || s.file.startsWith(process.env.ONLY))) {
     // a fresh page each time: the drawing code declares top-level constants
     const tab = await browser.newPage({ viewport: { width: 1400, height: 800 }, deviceScaleFactor: 2 });
     tab.on("pageerror", (e) => console.error("page error:", e.message));

@@ -233,6 +233,38 @@ Renderer.foodDelta({}, { 2, 3 })
 Renderer.removeCells({ 1101, 1103 }, { ["1101"] = 1102 })
 for i = 1, 20 do Renderer.update(0.03, 2 + i * 0.03) end
 print("eat animations ok")
+-- mutation gear: every mutation and fusion draws and animates through every ability
+local Gear = require("Gear")
+local powers = { "Chomp", "Vacuum", "Pierce", "Ghost", "GravityWell", "Blast" }
+local function gearTest(muts, core)
+  local root = Instance.new("Frame")
+  local h = Gear.build(root, muts, Color3.new(0.5, 0.5, 0.5), core)
+  assert(h, "no gear drawn for " .. tostring(next(muts) and muts[next(muts)] or core))
+  for _, pw in ipairs(powers) do
+    for i = 0, 12 do
+      Gear.animate(h, 0.1, i * 0.1, { dx = 0.6, dz = -0.8, fight = i % 2 == 0, dash = i % 3 == 0, power = pw, powerAge = i * 0.1 })
+    end
+  end
+  Gear.animate(h, 0.1, 5, { dx = 1, dz = 0 })
+  return h
+end
+for _, mid in ipairs(Config.MutationOrder) do gearTest({ [Config.Mutations[mid].Slot] = mid }) end
+for _, fid in ipairs(Config.FusionOrder) do gearTest({ Front = fid, Back = "#" .. fid }) end
+gearTest({}, "Star")
+assert(Gear.build(Instance.new("Frame"), {}, Color3.new(1, 1, 1), "Blob") == nil, "no gear for a plain germ")
+-- in the renderer: fighting, dashing germs using abilities
+o = 8
+for cidKey in pairs(cells) do
+  local cid = tonumber(cidKey)
+  if Renderer.cells[cid] then
+    buffer.writeu32(buf, o, cid) buffer.writef32(buf, o + 4, 2400 + cid % 50) buffer.writef32(buf, o + 8, 3 + cid % 7) buffer.writef32(buf, o + 12, 50) buffer.writeu8(buf, o + 16, 12)
+    o = o + 17
+  end
+end
+Renderer.snapshot(buf)
+for gid in pairs(germs) do Renderer.power(tonumber(gid), powers[tonumber(gid) % #powers + 1]) end
+for i = 1, 30 do Renderer.update(0.1, 3 + i * 0.1) end
+print("gear ok")
 -- effects
 for _, e in ipairs({
   { "Ink", { { x = 1, z = 2, r = 3 } } }, { "Warps", { { x = 1, z = 2, r = 3 }, { x = 1, z = 2, r = 3 } } }, { "Spikes", { { x = 1, z = 2, r = 3 } } },
@@ -303,7 +335,7 @@ print("CLIENT SMOKE OK")
 `;
 let code = (process.env.MENU_TOUCH ? "MENU_TOUCH = true\n" : "") + prelude;
 for (const n of ["Config", "Formulas", "Flags", "Names"]) code += wrap(n, read(`shared/${n}.luau`));
-for (const n of ["Ui", "Looks", "Renderer", "Fx", "Hud", "Menus"]) code += wrap(n, read(`client/${n}.luau`));
+for (const n of ["Ui", "Looks", "Gear", "Renderer", "Fx", "Hud", "Menus"]) code += wrap(n, read(`client/${n}.luau`));
 const tool = (f) => fs.readFileSync(path.join(__dirname, f), "utf8");
 let runCode = run.replace("__MENU_DUMP__", process.env.MENU_DUMP ? tool("gui-json.lua") + tool("menu-dump.lua") : "")
   .replace("__LOOK_DUMP__", process.env.LOOK_DUMP ? tool("gui-json.lua") + tool("look-dump.lua") : "");

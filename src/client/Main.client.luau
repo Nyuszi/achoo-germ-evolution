@@ -67,6 +67,11 @@ Remotes.Snapshot.OnClientEvent:Connect(Renderer.snapshot)
 Remotes.FoodSync.OnClientEvent:Connect(Renderer.foodSync)
 Remotes.FoodDelta.OnClientEvent:Connect(Renderer.foodDelta)
 Remotes.DishFx.OnClientEvent:Connect(Fx.event)
+Remotes.DishFx.OnClientEvent:Connect(function(kind, data)
+	if kind == "Power" then
+		Renderer.power(data.id, data.kind) -- someone used an ability: their mutation animates it
+	end
+end)
 Remotes.Notify.OnClientEvent:Connect(Hud.notify)
 Remotes.Announce.OnClientEvent:Connect(Hud.announce)
 Remotes.Feed.OnClientEvent:Connect(Hud.feed)

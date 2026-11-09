@@ -12,23 +12,9 @@ const TRAILS = { Bubbles: [[180,230,255],[255,255,255]], Sparkles: [[255,240,150
   Hearts: [[255,120,170],[255,200,220]], Fire: [[255,200,40],[255,60,20]], ArenaFlame: [[120,255,220],[40,120,255]], ArenaLightning: [[255,255,120],[160,120,255]] };
 const BODY = { Jelly: ["SmoothPlastic", 0.12], Fuzzy: ["Fabric", 0], Slime: ["Glass", 0.25], Crystal: ["Glass", 0.35], Lava: ["CrackedLava", 0],
   Galaxy: ["Neon", 0.1], Candy: ["Plastic", 0], Robot: ["DiamondPlate", 0], Champion: ["Foil", 0] };
-function parts(look) {
-  const skin = look.skin || {}, color = look.color, color2 = skin.Color2 || WHITE, muts = look.muts || {};
-  const P = [];
-  const ex = (shape, c, size, fwd, up, right, extra) => P.push(Object.assign({ shape, c, size, fwd, up, right }, extra || {}));
-  const has = (slot, id) => muts[slot] === id;
-  const bone = [245,245,230];
-  if (has("Front","Jaws")) { ex("block", bone, [0.25,0.3,0.55], 1.0, 0, -0.25); ex("block", bone, [0.25,0.3,0.55], 1.0, 0, 0.25); }
-  if (has("Front","Suction")) ex("disc", lerp(color, [255,120,150], 0.5), [0.3,0.7,0.7], 1.0, 0, 0, { flatSide: true });
-  if (has("Front","Drill")) ex("tri", [170,170,185], [0.3,0.3,0.8], 1.15, 0, 0);
-  if (has("Back","Flagella")) ex("block", lerp(color, BLACK, 0.2), [0.18,0.12,1.3], -1.35, 0, 0, { wavy: true });
-  if (has("Back","Jet")) { ex("disc", [255,160,60], [0.3,0.35,0.35], -1.05, 0, -0.3, { neon: true }); ex("disc", [255,160,60], [0.3,0.35,0.35], -1.05, 0, 0.3, { neon: true }); }
-  if (has("Back","Slime")) ex("ball", [120,230,90], [0.7,0.7,0.7], -1.1, -0.3, 0, { alpha: 0.6 });
-  if (has("Sides","Spikes")) for (let i = 1; i <= 8; i++) { const a = i / 8 * Math.PI * 2; ex("block", lerp(color, BLACK, 0.45), [0.22,0.22,0.6], Math.cos(a) * 1.05, 0, Math.sin(a) * 1.05, { rot: a }); }
-  if (has("Sides","Toxin")) for (let i = 1; i <= 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4; ex("ball", [150,255,80], [0.25,0.25,0.25], Math.cos(a) * 0.95, 0.2, Math.sin(a) * 0.95, { neon: true }); }
-  if (has("Special","Magnet")) { ex("block", [230,60,60], [0.25,0.4,0.25], 0, 1.0, -0.2); ex("block", [60,90,230], [0.25,0.4,0.25], 0, 1.0, 0.2); }
-  if (has("Special","Sneezer")) ex("ball", lerp(color, [255,120,120], 0.5), [0.3,0.3,0.3], 0.95, 0.55, 0);
-  return P;
+// 3D extras on the body: none any more, mutations are 2D art (src/client/Gear.luau) in the look overlay
+function parts() {
+  return [];
 }
 function paintBody(g, x, y, r, look) {
   const skin = look.skin || {}, color = look.color;

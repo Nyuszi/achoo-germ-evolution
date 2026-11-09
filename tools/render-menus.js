@@ -10,7 +10,7 @@ const { chromium } = require("playwright");
 const out = path.resolve(process.argv[2] || "menu-previews");
 fs.mkdirSync(out, { recursive: true });
 const SHOTS = [
-  ["Lab", "Mutations"], ["Lab", "Runs"], ["Editor", "Body"], ["Editor", "Eyes"], ["Editor", "Hat"], ["Editor", "Flag"], ["Shop"], ["Quests", "Daily"],
+  ["Lab", "Mutations"], ["Lab", "Fusions"], ["Lab", "Runs"], ["Editor", "Body"], ["Editor", "Eyes"], ["Editor", "Hat"], ["Editor", "Flag"], ["Shop"], ["Quests", "Daily"],
   ["Quests", "Cards"], ["Arena"], ["Leaders", "Speedrun"], ["Feedback"], ["Dev"], ["_hud"],
 ];
 const BAR_NAME = { Lab: "Lab", Editor: "Editor", Shop: "Shop", Quests: "Quests", Arena: "Arena", Leaders: "Top", Feedback: "Ideas", Dev: "Dev" };
