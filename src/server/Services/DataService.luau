@@ -14,9 +14,35 @@ local DEFAULTS = {
 	BestSize = 0,
 	Kills = 0,
 	Deaths = 0,
-	Sneezes = 0,
-	Mutations = {}, -- [mutationId] = true (owned)
-	Equipped = {}, -- [slot] = mutationId
+	Sneezes = 0, -- total sneezes ever (+25% growth each)
+	Host = 1, -- the host you are in now (1-6)
+	MaxHost = 1,
+	Mutant = 0, -- finished all 6 hosts this many times (Mutant I unlocks the Arena)
+	GermPoints = 0,
+	Skills = {}, -- [skillId] = level
+	Levels = {}, -- [mutationId] = level (0 or missing = not owned)
+	Fusions = {}, -- [fusionId] = true
+	Equipped = {}, -- [slot] = mutationId or fusionId ("#fusionId" marks a slot a fusion also uses)
+	Loadouts = {}, -- [1..3] = copy of Equipped
+	Core = "Blob",
+	Skin = { Body = "Jelly", Pattern = "None", Eyes = "Cute", Mouth = "Smile", Hat = "None", Trail = "None", SneezeFx = "Classic", Flag = "", Color = { 120, 220, 120 }, Color2 = { 255, 255, 255 } },
+	OwnedSkins = {}, -- ["Body:Lava"] = true
+	Flags = {}, -- [countryCode] = true
+	Outfits = {}, -- [1..3] = copy of Skin
+	TestPasses = {}, -- passes "bought" for free in Studio while their id is 0
+	Potions = 0,
+	PotionUntil = 0, -- unix time
+	Quests = { Day = 0, List = {}, Weekly = 0, Week = 0, WeeklyClaimed = false },
+	Streak = { Day = 0, Count = 0 },
+	Codes = {}, -- [code] = true
+	Cards = {}, -- [cardName] = true
+	CardSetsClaimed = {},
+	ArenaBest = 0, -- best floor this season
+	ArenaBestEver = 0,
+	ArenaSeason = 0,
+	ArenaFloor = 1, -- the floor you continue from (a checkpoint)
+	Tokens = 0,
+	BossesBeaten = 0,
 	TotalPlaySeconds = 0,
 	Receipts = {}, -- [purchaseId] = true, so a purchase is never granted twice
 	ReceiptOrder = {},
@@ -47,6 +73,12 @@ local function reconcile(data)
 	for key, default in DEFAULTS do
 		if data[key] == nil then
 			data[key] = deepCopy(default)
+		elseif (key == "Skin" or key == "Quests" or key == "Streak") and type(data[key]) == "table" then
+			for k, v in default do
+				if data[key][k] == nil then
+					data[key][k] = deepCopy(v)
+				end
+			end
 		end
 	end
 	return data
@@ -68,6 +100,8 @@ local function withRetries(fn)
 	end
 	return false, lastError
 end
+
+DataService.reconcile = reconcile
 
 function DataService.load(player)
 	local data

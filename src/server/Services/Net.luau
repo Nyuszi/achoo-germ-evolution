@@ -7,24 +7,34 @@ local folder = Instance.new("Folder")
 folder.Name = "Remotes"
 
 local EVENTS = {
-	"Snapshot", -- server -> all: germ positions and sizes (a buffer, 10 per second)
-	"CellInfo", -- server -> all: names, colours and mutations of new germs ({ [id] = info })
-	"CellGone", -- server -> all: germs that were eaten, merged or left ({ ids })
-	"FoodSync", -- server -> client: every food pellet (on join)
-	"FoodDelta", -- server -> all: pellets added and eaten since the last tick
+	"Snapshot", -- server -> dish viewers: germ positions and sizes (a buffer, 10 per second)
+	"CellInfo", -- server -> dish viewers: names, colours, mutations and skins of germs
+	"CellGone", -- server -> dish viewers: cells that were eaten, merged or left ({ ids })
+	"FoodSync", -- server -> client: every food pellet of the dish you just entered
+	"FoodDelta", -- server -> dish viewers: pellets added and eaten since the last snapshot
+	"DishInfo", -- server -> client: the dish you are in now (host or Arena floor, theme, modifiers)
+	"DishFx", -- server -> dish viewers: hazards and events (kind, data)
 	"Sync", -- server -> client: your stats for the HUD
+	"Profile", -- server -> client: your saved progress for the menus (Lab, Editor, Quests...)
 	"Notify", -- server -> client: a toast message
-	"Feed", -- server -> all: "A ate B" kill feed
-	"Announce", -- server -> all: big server-wide message
+	"Feed", -- server -> dish viewers: "A ate B" kill feed
+	"Announce", -- server -> all or a dish: big message
 	"Died", -- server -> client: you were eaten (by whom, respawn in)
-	"Action", -- client -> server: "Dash" or "Split"
+	"Sneeze", -- server -> client: you sneezed (from host, to host, effect)
+	"Prompt", -- server -> client: ask the client to show a Roblox prompt ("Favorite", "Invite")
+	"Action", -- client -> server: "Dash", "Split", "Front" (Q), "Special" (R)
 }
 local UNRELIABLE = {
 	"Steer", -- client -> server: where you are steering (x, z), many times a second
 }
 local FUNCTIONS = {
-	"BuyMutation",
-	"EquipMutation",
+	"Lab", -- mutations, levels, fusions, cores, skills, loadouts
+	"Shop", -- passes, products, skins, flags
+	"Editor", -- equip skin items, colours, outfits
+	"Quests", -- claim, redeem codes
+	"Arena", -- enter, leave, token shop
+	"Leaders", -- leaderboard lists
+	"Dev", -- test commands (Studio and the game owner only)
 	"SendFeedback",
 }
 

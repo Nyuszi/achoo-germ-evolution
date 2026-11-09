@@ -1,5 +1,8 @@
 -- Pure maths for the game: no Roblox objects, so tools/test-formulas.js can test it.
 -- Keep this file plain Lua (no types, no +=).
+--
+-- A "layout" describes one dish: { zones, radius, sneeze, scale, start, host }.
+-- Hosts and Arena floors each have one (Formulas.hostLayout / Formulas.arenaLayout).
 local Config = require(script.Parent.Config)
 
 local Formulas = {}
@@ -15,27 +18,52 @@ end
 Formulas.clamp = clamp
 
 function Formulas.host(index)
-	return Config.Hosts[index or Config.HostIndex]
+	return Config.Hosts[index or 1]
+end
+
+function Formulas.hostLayout(index)
+	local h = Config.Hosts[index or 1]
+	return {
+		host = index or 1,
+		zones = Config.Zones,
+		radius = Config.DishRadius,
+		sneeze = h.SneezeSize,
+		scale = h.Scale,
+		start = Config.StartSize * h.Scale,
+	}
+end
+
+-- Arena floors: one zone, everyone starts at the same size.
+local arenaZones = { { Outer = Config.Arena.Radius, MinShare = 0, FoodValue = 3, FoodCount = 280 } }
+function Formulas.arenaLayout(radius)
+	local r = radius or Config.Arena.Radius
+	local zones = { { Outer = r, MinShare = 0, FoodValue = arenaZones[1].FoodValue, FoodCount = math.floor(arenaZones[1].FoodCount * (r / Config.Arena.Radius) ^ 2) } }
+	return {
+		arena = true,
+		zones = zones,
+		radius = r,
+		sneeze = Config.Arena.GoalSize,
+		scale = 1,
+		start = Config.Arena.StartSize,
+	}
 end
 
 -- Drawn radius in studs. The size number is divided by the host's scale, so a germ
 -- looks small again in every new host.
 function Formulas.radius(size, scale)
-	scale = scale or Formulas.host().Scale
-	return Config.RadiusPerRootSize * math.sqrt(math.max(size, 0) / scale)
+	return Config.RadiusPerRootSize * math.sqrt(math.max(size, 0) / (scale or 1))
 end
 
--- Swim speed in studs per second: bigger germs are slower. mult = 1 + mutation bonuses.
+-- Swim speed in studs per second: bigger germs are slower. mult = 1 + bonuses.
 function Formulas.speed(size, scale, mult)
-	scale = scale or Formulas.host().Scale
-	local visual = math.max(size / scale, 1)
+	local visual = math.max(size / (scale or 1), 1)
 	local s = Config.BaseSpeed * visual ^ -Config.SpeedSizeExponent
 	return clamp(s, Config.MinSpeed, Config.MaxSpeed) * (mult or 1)
 end
 
--- Can a germ of eaterSize swallow a germ of preySize?
-function Formulas.canEat(eaterSize, preySize)
-	return eaterSize >= preySize * Config.EatRatio
+-- Can a germ of eaterSize swallow a germ of preySize? (ratio: Black Hole Mouth lowers it)
+function Formulas.canEat(eaterSize, preySize, ratio)
+	return eaterSize >= preySize * (ratio or Config.EatRatio)
 end
 
 -- Are two germs close enough in size to fight instead?
@@ -54,18 +82,29 @@ function Formulas.eatSplit(preySize)
 	return keep, preySize - keep
 end
 
--- Fight damage per second dealt by attacker to defender (in size points).
--- attacker/defender: { size, bite, thorns, armor, mult } (mutation numbers, 0 when missing).
--- Spikes (thorns) hurt whoever you touch; mult lets bots go easy on new players.
+-- Fight damage dealt by attacker to defender over dt (in size points).
+-- attacker: { size, bite, thorns, mult, pierce }  defender: { size, armor }
 function Formulas.fightDamage(attacker, defender, dt)
 	local share = Config.FightDamagePerSecond * (1 + (attacker.bite or 0)) + (attacker.thorns or 0)
-	share = share * (1 - (defender.armor or 0)) * (attacker.mult or 1)
+	local armor = math.max(0, (defender.armor or 0) - (attacker.pierce or 0))
+	share = share * (1 - math.min(armor, 0.8)) * (attacker.mult or 1)
 	return defender.size * share * dt
 end
 
+-- Damage a germ deals to an immune boss while touching it.
+function Formulas.bossDamage(attackerSize, bite, dt)
+	return attackerSize * Config.Immune.PlayerDamage * (1 + (bite or 0)) * dt
+end
+
+-- Zones ----------------------------------------------------------------------------------
+
+local function layoutOf(layout)
+	return layout or Formulas.hostLayout(1)
+end
+
 -- Which zone (1 = outer ring) a distance from the centre is in.
-function Formulas.zoneAt(dist)
-	local zones = Config.Zones
+function Formulas.zoneAt(dist, layout)
+	local zones = layoutOf(layout).zones
 	for i = #zones, 1, -1 do
 		if dist <= zones[i].Outer then
 			return i
@@ -74,57 +113,63 @@ function Formulas.zoneAt(dist)
 	return 1
 end
 
-function Formulas.zoneMinSize(zone, hostIndex)
-	return Config.Zones[zone].MinShare * Formulas.host(hostIndex).SneezeSize
+function Formulas.zoneMinSize(zone, layout)
+	layout = layoutOf(layout)
+	return layout.zones[zone].MinShare * layout.sneeze
 end
 
-function Formulas.zoneMaxSize(zone, hostIndex)
-	local share = Config.Zones[zone].MaxShare
+function Formulas.zoneMaxSize(zone, layout)
+	layout = layoutOf(layout)
+	local share = layout.zones[zone].MaxShare
 	if not share then
 		return math.huge
 	end
-	return share * Formulas.host(hostIndex).SneezeSize
+	return share * layout.sneeze
 end
 
 -- The deepest zone a germ of this size may enter.
-function Formulas.deepestZone(size, hostIndex)
+function Formulas.deepestZone(size, layout)
+	layout = layoutOf(layout)
 	local deepest = 1
-	for i = 1, #Config.Zones do
-		if size >= Formulas.zoneMinSize(i, hostIndex) then
+	for i = 1, #layout.zones do
+		if size >= Formulas.zoneMinSize(i, layout) then
 			deepest = i
 		end
 	end
 	return deepest
 end
 
--- The band of distances from the centre a germ of this size may use (ignoring its radius).
--- Too small for an inner zone: kept outside it. Too big for zone 1: kept inside zone 2.
-function Formulas.allowedRange(size, hostIndex)
-	local zones = Config.Zones
-	local deepest = Formulas.deepestZone(size, hostIndex)
-	local minDist = 0
-	if deepest < #zones then
-		minDist = zones[deepest + 1].Outer
-	end
-	local maxDist = Config.ArenaRadius
-	if size > Formulas.zoneMaxSize(1, hostIndex) and #zones > 1 then
-		maxDist = zones[2].Outer
-	end
-	return math.min(minDist, maxDist), maxDist
-end
-
 -- The outermost zone a germ of this size may use (1 unless it is too big for zone 1).
-function Formulas.shallowestZone(size, hostIndex)
-	if size > Formulas.zoneMaxSize(1, hostIndex) and #Config.Zones > 1 then
+function Formulas.shallowestZone(size, layout)
+	layout = layoutOf(layout)
+	if #layout.zones > 1 and size > Formulas.zoneMaxSize(1, layout) then
 		return 2
 	end
 	return 1
 end
 
+-- The band of distances from the centre a germ of this size may use (ignoring its radius).
+-- Too small for an inner zone: kept outside it. Too big for zone 1: kept inside zone 2.
+function Formulas.allowedRange(size, layout, radiusOverride)
+	layout = layoutOf(layout)
+	local zones = layout.zones
+	local deepest = Formulas.deepestZone(size, layout)
+	local minDist = 0
+	if deepest < #zones then
+		minDist = zones[deepest + 1].Outer
+	end
+	local maxDist = radiusOverride or layout.radius
+	if Formulas.shallowestZone(size, layout) == 2 then
+		maxDist = math.min(maxDist, zones[2].Outer)
+	end
+	return math.min(minDist, maxDist), maxDist
+end
+
 -- Keeps a germ inside the zones it is allowed in. Returns the corrected distance from the centre.
-function Formulas.clampDistance(dist, size, radius, hostIndex)
-	local minDist, maxDist = Formulas.allowedRange(size, hostIndex)
-	maxDist = math.min(maxDist, Config.ArenaRadius - radius)
+-- wall: the current outer wall (it moves in during a Medicine drop or Arena sudden death).
+function Formulas.clampDistance(dist, size, radius, layout, wall)
+	local minDist, maxDist = Formulas.allowedRange(size, layout, wall)
+	maxDist = math.max(0, maxDist - radius)
 	if minDist > 0 then
 		minDist = minDist + radius
 	end
@@ -134,9 +179,16 @@ function Formulas.clampDistance(dist, size, radius, hostIndex)
 	return clamp(dist, minDist, maxDist)
 end
 
+-- Growth, respawn, DNA ---------------------------------------------------------------------
+
 -- Size after being eaten.
-function Formulas.respawnSize(sizeAtDeath, share)
-	return math.max(Config.StartSize, math.floor(sizeAtDeath * (share or Config.RespawnShare)))
+function Formulas.respawnSize(sizeAtDeath, share, startSize)
+	return math.max(startSize or Config.StartSize, math.floor(sizeAtDeath * (share or Config.RespawnShare)))
+end
+
+-- Food and eat gains grow +25% per sneeze, forever.
+function Formulas.growthMult(sneezes)
+	return 1 + Config.SneezeGrowthBonus * (sneezes or 0)
 end
 
 -- Repeated feeding from the same player gives less each time (anti-boosting).
@@ -149,28 +201,97 @@ function Formulas.bountyShare(secondsCrowned)
 	return math.min(Config.BountyMaxShare, Config.BountyStartShare + Config.BountyPerMinute * (secondsCrowned / 60))
 end
 
--- DNA for swallowing a germ.
+-- DNA for swallowing a germ. DNA is counted in host-1 units: sizes are divided by the scale.
 function Formulas.killDna(preySize, opts)
 	opts = opts or {}
-	local dna = preySize * Config.DnaKillShare
+	local dna = preySize / (opts.scale or 1) * Config.DnaKillShare
 	if opts.crowned then
-		dna = dna + preySize * Formulas.bountyShare(opts.crownedSeconds or 0)
+		dna = dna + preySize / (opts.scale or 1) * Formulas.bountyShare(opts.crownedSeconds or 0)
 	end
 	if opts.revenge then
 		dna = dna * Config.RevengeDnaMult
 	end
-	dna = dna * Formulas.feedMult(opts.recentFeeds)
+	dna = dna * Formulas.feedMult(opts.recentFeeds) * (opts.mult or 1)
 	return math.floor(dna + 0.5)
 end
 
 -- Size lost per second by big germs.
-function Formulas.decay(size, dt, hostIndex)
-	local start = Config.DecayStartShare * Formulas.host(hostIndex).SneezeSize
+function Formulas.decay(size, dt, layout)
+	layout = layoutOf(layout)
+	local start = Config.DecayStartShare * layout.sneeze
 	if size <= start then
 		return 0
 	end
 	return (size - start) * Config.DecayPerSecond * dt
 end
+
+-- Mutations ------------------------------------------------------------------------------------
+
+-- DNA cost of buying level `level` of a mutation.
+function Formulas.mutationCost(id, level)
+	local m = Config.Mutations[id]
+	return math.floor(m.Cost * level ^ 1.6 + 0.5)
+end
+
+-- The value of one stat of a mutation at a level: { base, perLevel } or a plain number.
+function Formulas.mutationStat(id, stat, level)
+	local m = Config.Mutations[id]
+	local v = m and m[stat]
+	if v == nil or (level or 0) <= 0 then
+		return 0
+	end
+	if type(v) == "number" then
+		return v
+	end
+	return v[1] + v[2] * (level - 1)
+end
+
+-- In the Arena, mutation levels are capped by floor.
+function Formulas.arenaLevelCap(floor)
+	local cap = 1
+	for _, step in ipairs(Config.Arena.LevelCaps) do
+		if floor >= step[1] then
+			cap = step[2]
+		end
+	end
+	return cap
+end
+
+function Formulas.arenaRank(floor)
+	local rank = Config.Arena.Ranks[1]
+	for _, r in ipairs(Config.Arena.Ranks) do
+		if floor >= r.From then
+			rank = r
+		end
+	end
+	return rank.Name
+end
+
+function Formulas.arenaCheckpoint(floor)
+	local every = Config.Arena.CheckpointEvery
+	return math.max(1, math.floor(floor / every) * every)
+end
+
+-- How many modifiers a floor rolls
+function Formulas.arenaModifierCount(floor)
+	if floor >= 50 then
+		return 3
+	elseif floor >= 25 then
+		return 2
+	end
+	return 1
+end
+
+-- Season number and seconds left, from a unix time
+function Formulas.season(unixTime)
+	local length = Config.Arena.SeasonDays * 86400
+	local since = unixTime - Config.Arena.SeasonStart
+	local index = math.floor(since / length) + 1
+	local left = length - (since % length)
+	return index, left
+end
+
+-- Camera and text ----------------------------------------------------------------------------
 
 -- Camera height above the dish for a germ (or group of cells) with this drawn radius.
 function Formulas.cameraHeight(radius)
@@ -194,6 +315,11 @@ function Formulas.formatNumber(n)
 		end
 	end
 	return tostring(n)
+end
+
+-- Today's day number (UTC) for daily quests and streaks
+function Formulas.dayNumber(unixTime)
+	return math.floor(unixTime / 86400)
 end
 
 return Formulas

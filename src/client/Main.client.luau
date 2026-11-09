@@ -1,17 +1,21 @@
 -- The client: bird's-eye camera that zooms out as you grow, steering (mouse, touch, WASD),
--- Dash/Split keys, and wiring the server's messages to the renderer and HUD.
+-- Dash/Split/ability keys, and wiring the server's messages to the renderer, effects, HUD and menus.
+local AvatarEditorService = game:GetService("AvatarEditorService")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local SocialService = game:GetService("SocialService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Formulas = require(ReplicatedStorage.Shared.Formulas)
 local Renderer = require(script.Parent.Renderer)
+local Fx = require(script.Parent.Fx)
 local Hud = require(script.Parent.Hud)
+local Menus = require(script.Parent.Menus)
 
 local player = Players.LocalPlayer
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -24,31 +28,67 @@ end)
 
 local myGermId = nil
 local alive = false
+local camX, camZ, camH = 0, 0, Config.Camera.BaseHeight
+
+Fx.banner = Hud.announce
+Fx.bossHp = Hud.bossHp
+Fx.arenaTimer = Hud.arenaTimer
+Menus.notify = Hud.notify
 
 -- Server messages ---------------------------------------------------------------------------
+Remotes.DishInfo.OnClientEvent:Connect(function(info)
+	Renderer.setDish(info)
+	Fx.setDish(info)
+	-- jump the camera to the new dish
+	camX, camZ = info.cx, info.cz
+	if info.kind == "host" then
+		Hud.announce("🦠 Inside " .. info.name .. "! " .. (info.hazard or ""))
+	else
+		local mods = {}
+		for _, id in info.modifiers or {} do
+			table.insert(mods, Config.Arena.Modifiers[id].Name)
+		end
+		Hud.announce("🏟️ Floor " .. info.floor .. (#mods > 0 and (": " .. table.concat(mods, ", ")) or ""))
+	end
+end)
 Remotes.CellInfo.OnClientEvent:Connect(Renderer.applyInfo)
 Remotes.CellGone.OnClientEvent:Connect(Renderer.removeCells)
 Remotes.Snapshot.OnClientEvent:Connect(Renderer.snapshot)
 Remotes.FoodSync.OnClientEvent:Connect(Renderer.foodSync)
 Remotes.FoodDelta.OnClientEvent:Connect(Renderer.foodDelta)
+Remotes.DishFx.OnClientEvent:Connect(Fx.event)
 Remotes.Notify.OnClientEvent:Connect(Hud.notify)
 Remotes.Announce.OnClientEvent:Connect(Hud.announce)
 Remotes.Feed.OnClientEvent:Connect(Hud.feed)
-Remotes.Died.OnClientEvent:Connect(function(eaterName, seconds)
+Remotes.Profile.OnClientEvent:Connect(Menus.setProfile)
+Remotes.Sneeze.OnClientEvent:Connect(Hud.sneeze)
+Remotes.Died.OnClientEvent:Connect(function(eaterName, seconds, canRevive, backToFloor)
 	alive = false
-	Hud.died(eaterName, seconds)
+	Hud.died(eaterName, seconds, canRevive, backToFloor)
 end)
 Remotes.Sync.OnClientEvent:Connect(function(state)
 	myGermId = state.germId
+	Renderer.myGermId = myGermId
 	alive = state.alive
+	Menus.setMode(state.mode)
 	Hud.sync(state)
+end)
+Remotes.Prompt.OnClientEvent:Connect(function(kind)
+	if kind == "Favorite" then
+		pcall(function()
+			AvatarEditorService:PromptSetFavorite(game.PlaceId, Enum.AvatarItemType.Asset, true)
+		end)
+	elseif kind == "Invite" then
+		pcall(function()
+			SocialService:PromptGameInvite(player)
+		end)
+	end
 end)
 
 -- Camera -------------------------------------------------------------------------------------
 -- Straight down from above. Height follows your size, so a bigger germ sees more of the host.
 camera.CameraType = Enum.CameraType.Scriptable
 camera.FieldOfView = 60
-local camX, camZ, camH = 0, 0, Config.Camera.BaseHeight
 local zoom = 1 -- mouse wheel / pinch, 0.7 .. 1.6
 local pulse = 0 -- short zoom bump when you grow a lot
 local lastTotal = 0
@@ -56,7 +96,7 @@ local growCheck = 0
 local lastRadius = Formulas.radius(Config.StartSize)
 
 UserInputService.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseWheel then
+	if input.UserInputType == Enum.UserInputType.MouseWheel and not Hud.isOverUi(input.Position.X, input.Position.Y) then
 		zoom = math.clamp(zoom - input.Position.Z * 0.08, 0.7, 1.6)
 	end
 end)
@@ -101,6 +141,9 @@ local KEYS = {
 local usingKeys = false
 
 local function updateSteer(cx, cz, radius)
+	if UserInputService:GetFocusedTextBox() then
+		return
+	end
 	local kx, kz = 0, 0
 	for key, dir in KEYS do
 		if UserInputService:IsKeyDown(key) then
@@ -143,19 +186,19 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
--- Dash and split keys
-ContextActionService:BindAction("GermDash", function(_, state)
-	if state == Enum.UserInputState.Begin then
-		Remotes.Action:FireServer("Dash")
-	end
-	return Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonR2)
-ContextActionService:BindAction("GermSplit", function(_, state)
-	if state == Enum.UserInputState.Begin then
-		Remotes.Action:FireServer("Split")
-	end
-	return Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
+-- Move keys
+local function bind(name, action, ...)
+	ContextActionService:BindAction(name, function(_, state)
+		if state == Enum.UserInputState.Begin and not UserInputService:GetFocusedTextBox() then
+			Remotes.Action:FireServer(action)
+		end
+		return Enum.ContextActionResult.Pass
+	end, false, ...)
+end
+bind("GermDash", "Dash", Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonR2)
+bind("GermSplit", "Split", Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
+bind("GermFront", "Front", Enum.KeyCode.Q, Enum.KeyCode.ButtonX)
+bind("GermSpecial", "Special", Enum.KeyCode.R, Enum.KeyCode.ButtonY)
 
 -- Frame loop ------------------------------------------------------------------------------------
 local sendTimer, boardTimer, clock = 0, 0, 0
@@ -163,6 +206,7 @@ RunService.RenderStepped:Connect(function(dt)
 	clock += dt
 	Renderer.update(dt, clock)
 	Hud.tick(dt)
+	Fx.update(dt, camH)
 
 	local cx, cz, radius, total = nil, nil, nil, 0
 	if myGermId then
@@ -197,7 +241,11 @@ RunService.RenderStepped:Connect(function(dt)
 		sendTimer = 0
 		updateSteer(cx, cz, radius)
 		if steerX then
-			Remotes.Steer:FireServer(steerX, steerZ)
+			local sx, sz = steerX, steerZ
+			if Fx.mirror then
+				sx, sz = cx - (steerX - cx), cz - (steerZ - cz)
+			end
+			Remotes.Steer:FireServer(sx, sz)
 		end
 	end
 

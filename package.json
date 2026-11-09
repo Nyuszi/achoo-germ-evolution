@@ -3,8 +3,11 @@
   "private": true,
   "scripts": {
     "test": "node tools/test-formulas.js",
+    "check": "node tools/check-syntax.js && node tools/lint-globals.js",
+    "smoke": "node tools/client-smoke.js",
     "sim": "node tools/sim-server.js 30",
-    "check": "node tools/check-syntax.js"
+    "sim:arena": "ARENA_AT=1 node tools/sim-server.js 12",
+    "all": "node tools/check-syntax.js && node tools/lint-globals.js && node tools/test-formulas.js && node tools/client-smoke.js"
   },
   "devDependencies": {
     "fengari": "^0.1.4",

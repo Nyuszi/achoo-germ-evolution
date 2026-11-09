@@ -7,21 +7,24 @@
 --   Hunter   - chases smaller germs, gives up after a few seconds
 --   Coward   - runs early and dashes away
 --   Bully    - big and slow, goes for the crowned germ
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Formulas = require(ReplicatedStorage.Shared.Formulas)
 local Names = require(ReplicatedStorage.Shared.Names)
+local Stats = require(ReplicatedStorage.Shared.Stats)
+local Flags = require(ReplicatedStorage.Shared.Flags)
 local World = require(script.Parent.World)
 
 local BotService = {}
 
 local B = Config.Bots
 local bots = {} -- [germ] = brain
-local botCount = 0
-local pendingSpawns = 0
+local pending = {} -- [dish] = bots waiting to respawn
 local usedNames = {}
+BotService.playerCount = function(dish)
+	return 0
+end -- set by Main (DishService.playerCount)
 
 local BEHAVIOURS = { "Wanderer", "Wanderer", "Hunter", "Coward", "Wanderer", "Hunter" }
 
@@ -36,47 +39,96 @@ local function pickName()
 	return "Germ" .. math.random(100, 999)
 end
 
-local function pickSize()
+local function pickSize(dish)
+	if dish.kind == "arena" then
+		return Config.Arena.StartSize * (1 + math.random() * 1.5)
+	end
 	local roll = math.random()
 	for _, band in B.SizeMix do
 		roll -= band[1]
 		if roll <= 0 then
-			return math.random(band[2], band[3]) * Formulas.host().Scale
+			return math.random(band[2], band[3]) * dish.scale
 		end
 	end
-	return Config.StartSize * Formulas.host().Scale
+	return Config.StartSize * dish.scale
 end
 
-local function randomMutations()
-	local equipped = {}
+local function pick(list)
+	return list[math.random(1, #list)]
+end
+
+-- Bots dress like players: random colours, some paid-looking items, sometimes a flag
+local function randomSkin()
+	local s = Config.Skins
+	local function any(cat, chance)
+		if math.random() < chance then
+			return pick(s[cat]).Id
+		end
+		return s[cat][1].Id
+	end
+	local c = Config.GermColors[math.random(1, #Config.GermColors)]
+	local skin = {
+		Body = any("Body", 0.4), Pattern = any("Pattern", 0.4), Eyes = any("Eyes", 0.5), Mouth = any("Mouth", 0.5),
+		Hat = any("Hat", 0.25), Trail = any("Trail", 0.15), SneezeFx = "Classic", Flag = "",
+		Color = { math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255) }, Color2 = { 255, 255, 255 },
+	}
+	if skin.Body == "Champion" then
+		skin.Body = "Jelly"
+	end
+	if skin.Hat == "Laurel" then
+		skin.Hat = "None"
+	end
+	if skin.Trail == "ArenaFlame" or skin.Trail == "ArenaLightning" then
+		skin.Trail = "None"
+	end
+	if math.random() < 0.12 then
+		skin.Flag = pick(Flags.List).Code
+	end
+	return skin
+end
+
+local function randomBuild(dish)
+	local equipped, levels = {}, {}
+	local hostLevel = dish.host or 3
 	for _, id in Config.MutationOrder do
 		local m = Config.Mutations[id]
 		if not equipped[m.Slot] and math.random() < 0.3 then
 			equipped[m.Slot] = id
+			levels[id] = math.random(1, math.min(Config.MaxMutationLevel, 1 + hostLevel))
 		end
 	end
-	return equipped
+	local build = { equipped = equipped, levels = levels, core = (dish.host and Config.Hosts[dish.host].Core) or "Blob", sneezes = math.max(0, (dish.host or 1) - 1) }
+	if dish.kind == "arena" then
+		build.arena = true
+		build.floor = dish.floor
+		build.levelCap = Formulas.arenaLevelCap(dish.floor)
+	end
+	return build
 end
 
-function BotService.spawnBot()
-	local size = pickSize()
+function BotService.spawnBot(dish)
+	local size = pickSize(dish)
 	local behaviour = BEHAVIOURS[math.random(1, #BEHAVIOURS)]
-	if size >= 400 * Formulas.host().Scale then
+	if dish.kind == "host" and size >= 400 * dish.scale then
 		behaviour = "Bully"
 	end
+	local build = randomBuild(dish)
+	local skin = randomSkin()
 	local germ = World.newGerm({
 		name = pickName(),
-		color = Config.GermColors[math.random(1, #Config.GermColors)],
-		equipped = randomMutations(),
+		color = Color3.fromRGB(skin.Color[1], skin.Color[2], skin.Color[3]),
+		equipped = build.equipped,
+		skin = skin,
+		core = build.core,
+		stats = Stats.compute(build),
 	})
-	local brain = { behaviour = behaviour, nextThink = 0, huntStart = 0, restUntil = 0, wanderAt = 0 }
+	local brain = { behaviour = behaviour, nextThink = 0, huntStart = 0, restUntil = 0, wanderAt = 0, dish = dish }
 	germ.bot = brain
 	if behaviour == "Bully" then
 		germ.slowMult = 0.85
 	end
 	bots[germ] = brain
-	botCount += 1
-	World.spawnGerm(germ, size)
+	World.spawnGerm(germ, dish, size)
 	return germ
 end
 
@@ -85,29 +137,50 @@ local function removeBot(germ, pop)
 		return
 	end
 	bots[germ] = nil
-	botCount -= 1
 	usedNames[germ.name] = nil
-	if pop then
+	if pop and germ.alive then
 		World.popGerm(germ)
 	else
 		World.removeGerm(germ)
 	end
 end
 
-local function wanted()
-	return math.max(0, B.TargetGerms - #Players:GetPlayers())
+local function botsIn(dish)
+	local list = {}
+	for germ, brain in bots do
+		if brain.dish == dish then
+			table.insert(list, germ)
+		end
+	end
+	return list
+end
+
+local function wanted(dish)
+	if dish.kind == "arena" and dish.floor > Config.Arena.BotFloors then
+		return 0
+	end
+	return math.max(0, B.TargetGerms - BotService.playerCount(dish))
 end
 
 -- Called when a bot germ is fully eaten
 function BotService.onBotDied(germ)
+	local dish = germ.bot.dish
 	removeBot(germ, false)
-	pendingSpawns += 1
+	pending[dish] = (pending[dish] or 0) + 1
 	task.delay(B.RespawnMin + math.random() * (B.RespawnMax - B.RespawnMin), function()
-		pendingSpawns -= 1
-		if botCount < wanted() then
-			BotService.spawnBot()
+		pending[dish] = math.max(0, (pending[dish] or 0) - 1)
+		if World.dish(dish.id) and #botsIn(dish) < wanted(dish) then
+			BotService.spawnBot(dish)
 		end
 	end)
+end
+
+function BotService.dishRemoved(dish)
+	for _, germ in botsIn(dish) do
+		bots[germ] = nil
+		usedNames[germ.name] = nil
+	end
+	pending[dish] = nil
 end
 
 local function steerAway(germ, cx, cz, fromX, fromZ, distance)
@@ -137,20 +210,27 @@ local function think(germ, brain)
 
 	local threat, threatD, threatR = nil, math.huge, 0
 	local prey, preyD = nil, math.huge
-	for _, other in World.allGerms() do
-		if other ~= germ and other.alive then
+	for _, other in World.dishGerms(germ.dish) do
+		local antibody = other.npc and other.npc.kind == "antibody"
+		if other ~= germ and not antibody then
 			for _, cell in other.cells do
 				local dx, dz = cell.x - cx, cell.z - cz
 				local d = math.sqrt(dx * dx + dz * dz)
 				if d < view then
-					if Formulas.canEat(cell.size, smallest) and World.mayEat(other, germ) then
+					if other.npc and (Formulas.canEat(cell.size, smallest) or d - cell.r < 20) then
+						if d - cell.r < threatD then
+							threat, threatD, threatR = cell, d - cell.r, cell.r
+						end
+					elseif other.npc then
+						-- bosses are not prey
+					elseif Formulas.canEat(cell.size, smallest) and World.mayEat(other, germ) then
 						if d - cell.r < threatD then
 							threat, threatD, threatR = cell, d - cell.r, cell.r
 						end
 					elseif Formulas.canEat(biggest, cell.size) and World.mayEat(germ, other) then
 						local skip = other.player and other.isNewPlayer
 						local bonus = 1
-						if brain.behaviour == "Bully" and World.crowned == other then
+						if brain.behaviour == "Bully" and germ.dish.crowned == other then
 							bonus = 0.2
 						end
 						if not skip and d * bonus < preyD then
@@ -201,13 +281,13 @@ local function think(germ, brain)
 	brain.huntStart = 0
 
 	-- 3. graze
-	local pellet = World.nearestFood(cx, cz, 64, mySize)
+	local pellet = World.nearestFood(germ.dish, cx, cz, 64, mySize)
 	if pellet then
 		germ.target = { x = pellet.x, z = pellet.z }
 		return
 	end
 	if now >= brain.wanderAt then
-		local x, z = World.randomInZone(math.random(Formulas.shallowestZone(mySize), Formulas.deepestZone(mySize)), 10)
+		local x, z = World.randomInZone(germ.dish, math.random(Formulas.shallowestZone(mySize, germ.dish.layout), Formulas.deepestZone(mySize, germ.dish.layout)), 10)
 		germ.target = { x = x, z = z }
 		brain.wanderAt = now + 4 + math.random() * 4
 	end
@@ -228,26 +308,29 @@ function BotService.start()
 		end
 	end)
 
-	-- keep the dish at the target number of germs
+	-- keep every dish at the target number of germs
 	task.spawn(function()
 		while true do
-			local want = wanted()
-			if botCount + pendingSpawns < want then
-				BotService.spawnBot()
-			elseif botCount > want then
-				-- make room for a real player: pop the smallest bot nobody is chasing
-				local smallest, size = nil, math.huge
-				for germ in bots do
-					local s = World.germSize(germ)
-					if s < size then
-						smallest, size = germ, s
+			for _, dish in World.dishes() do
+				local mine = botsIn(dish)
+				local want = wanted(dish)
+				if #mine + (pending[dish] or 0) < want then
+					BotService.spawnBot(dish)
+				elseif #mine > want then
+					-- make room for a real player: pop the smallest bot
+					local smallest, size = nil, math.huge
+					for _, germ in mine do
+						local s = World.germSize(germ)
+						if s < size then
+							smallest, size = germ, s
+						end
+					end
+					if smallest then
+						removeBot(smallest, true)
 					end
 				end
-				if smallest then
-					removeBot(smallest, true)
-				end
 			end
-			task.wait(1)
+			task.wait(0.5)
 		end
 	end)
 end

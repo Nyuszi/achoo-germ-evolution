@@ -1,43 +1,37 @@
--- The simulation of the host's insides: germs (players and bots), their cells, food,
--- eating, same-size fights, dashing, splitting and the crown. The server owns all of it;
--- clients only send where they steer and draw the snapshots.
+-- The simulation. The world holds several "dishes": one per host in use and one per Arena floor
+-- in use. Each dish has its own germs, food, zones, hazards and events. The server owns
+-- everything; clients send where they steer and draw the snapshots of their own dish.
 --
--- A "germ" is one player or bot. A germ has 1-2 "cells" (2 after a split).
+-- A "germ" is one player, bot or immune NPC. A germ has 1-2 "cells" (2 after a split).
+-- Cell and food positions are stored relative to their dish's centre; the network sends
+-- world positions (centre + local).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Formulas = require(ReplicatedStorage.Shared.Formulas)
+local Stats = require(ReplicatedStorage.Shared.Stats)
 local Net = require(script.Parent.Net)
 
 local World = {}
 
-local HOST = Formulas.host()
-local SCALE = HOST.Scale
-
+local dishes = {} -- [dishId] = dish
 local germs = {} -- [germId] = germ
-local cells = {} -- [cellId] = cell
-local food = {} -- [foodId] = pellet
-local foodGrid = {} -- [gridKey] = { [foodId] = pellet }
-local zoneFoodCount = {}
+local cells = {} -- [cellId] = cell (all dishes)
 local nextId = 0
 local now = 0 -- simulation clock in seconds
+local slotsUsed = {} -- world slots for dish centres
 
--- Changes collected during a tick, sent with the next snapshot
-local foodAdded = {} -- flat list: id, x, z, value, golden(0/1), ...
-local foodRemoved = {}
-local cellsGone = {}
-local infoQueue = { cells = {}, germs = {} }
-local infoDirty = false
-
--- Hooks the other services fill in
 World.hooks = {
 	gainDna = function(germ, amount) end,
 	germDied = function(victim, eater) end, -- every cell of a germ was swallowed
 	ateGerm = function(eater, victim, info) end, -- info = { dna, revenge, crowned }
+	ateFood = function(germ, count, golden) end,
+	sneeze = function(germ) end, -- a germ at sneeze size touched the Sneeze Nerve
+	bossHit = function(boss, attacker, amount) end,
+	bossDefeated = function(boss, damageBy) end,
+	viewersChanged = function(dish) end,
+	dishTick = function(dish, dt) end, -- hazards and bosses that move every tick
 }
-
-World.crowned = nil -- the biggest germ right now
-World.bubbles = {} -- spawn bubble centres { x, z }
 
 local function newId()
 	nextId += 1
@@ -48,7 +42,7 @@ function World.now()
 	return now
 end
 
--- Food -------------------------------------------------------------------------------
+-- Dishes -------------------------------------------------------------------------------------
 
 local G = Config.GridCell
 local function gridKey(gx, gz)
@@ -58,66 +52,165 @@ local function cellOf(v)
 	return math.floor(v / G)
 end
 
-local function addFood(x, z, value, zone, golden)
+-- kind = "host" (hostIndex) or "arena" (floor). Returns a new dish at a free spot in the world.
+function World.newDish(kind, index, layout)
+	local slot = 1
+	while slotsUsed[slot] do
+		slot += 1
+	end
+	slotsUsed[slot] = true
+	local dish = {
+		id = newId(),
+		slot = slot,
+		kind = kind,
+		host = kind == "host" and index or nil,
+		floor = kind == "arena" and index or nil,
+		layout = layout,
+		scale = layout.scale,
+		cx = (slot - 1) * Config.DishSpacing,
+		cz = 0,
+		wall = layout.radius,
+		wallTarget = layout.radius,
+		cells = {},
+		food = {},
+		foodGrid = {},
+		zoneFoodCount = {},
+		bubbles = {},
+		crowned = nil,
+		foodAdded = {},
+		foodRemoved = {},
+		cellsGone = {},
+		info = { cells = {}, germs = {} },
+		infoDirty = false,
+		effects = { foodMult = 1, damageMult = 1, dnaMult = 1, pushX = 0, pushZ = 0, pull = 0, burnFrom = nil, burnRate = 0 },
+		ink = {}, -- { x, z, r } clouds that hide germs
+		warps = {}, -- { x, z, to }
+		spikes = {}, -- { x, z, r } Arena spike field
+		hidden = {}, -- [germ] = true, refreshed every tick
+		viewers = {}, -- [player] = true
+		tick = 0,
+	}
+	if kind == "host" then
+		local d = layout.radius - Config.SpawnBubbleRadius - 30
+		for i = 1, 6 do
+			local a = (i / 6) * math.pi * 2
+			table.insert(dish.bubbles, { x = math.cos(a) * d, z = math.sin(a) * d })
+		end
+	end
+	dishes[dish.id] = dish
+	for _ = 1, 200 do
+		World.refillFood(dish)
+	end
+	dish.foodAdded, dish.foodRemoved = {}, {}
+	return dish
+end
+
+function World.removeDish(dish)
+	for _, cell in dish.cells do
+		cells[cell.id] = nil
+	end
+	dishes[dish.id] = nil
+	slotsUsed[dish.slot] = nil
+end
+
+function World.dishes()
+	return dishes
+end
+
+function World.dish(id)
+	return dishes[id]
+end
+
+-- Players who receive this dish's snapshots
+function World.setViewer(player, dish)
+	for _, d in dishes do
+		if d.viewers[player] and d ~= dish then
+			d.viewers[player] = nil
+			World.hooks.viewersChanged(d)
+		end
+	end
+	if dish and not dish.viewers[player] then
+		dish.viewers[player] = true
+		World.hooks.viewersChanged(dish)
+	end
+end
+
+local function fireDish(dish, remote, ...)
+	for player in dish.viewers do
+		if player.Parent then
+			remote:FireClient(player, ...)
+		end
+	end
+end
+World.fireDish = fireDish
+
+-- Food -------------------------------------------------------------------------------------
+
+local function addFood(dish, x, z, value, zone, golden)
 	local id = newId()
 	local pellet = { id = id, x = x, z = z, v = value, zone = zone, golden = golden }
-	food[id] = pellet
+	dish.food[id] = pellet
 	local key = gridKey(cellOf(x), cellOf(z))
-	local bucket = foodGrid[key]
+	local bucket = dish.foodGrid[key]
 	if not bucket then
 		bucket = {}
-		foodGrid[key] = bucket
+		dish.foodGrid[key] = bucket
 	end
 	bucket[id] = pellet
 	pellet.key = key
 	if zone then
-		zoneFoodCount[zone] = (zoneFoodCount[zone] or 0) + 1
+		dish.zoneFoodCount[zone] = (dish.zoneFoodCount[zone] or 0) + 1
 	end
-	table.insert(foodAdded, id)
-	table.insert(foodAdded, math.floor(x * 10) / 10)
-	table.insert(foodAdded, math.floor(z * 10) / 10)
-	table.insert(foodAdded, value)
-	table.insert(foodAdded, golden and 1 or 0)
+	local list = dish.foodAdded
+	table.insert(list, id)
+	table.insert(list, math.floor((x + dish.cx) * 10) / 10)
+	table.insert(list, math.floor((z + dish.cz) * 10) / 10)
+	table.insert(list, value / dish.scale)
+	table.insert(list, golden and 1 or 0)
 	return pellet
 end
+World.addFood = addFood
 
-local function removeFood(pellet)
-	food[pellet.id] = nil
-	local bucket = foodGrid[pellet.key]
+local function removeFood(dish, pellet)
+	dish.food[pellet.id] = nil
+	local bucket = dish.foodGrid[pellet.key]
 	if bucket then
 		bucket[pellet.id] = nil
 	end
 	if pellet.zone then
-		zoneFoodCount[pellet.zone] -= 1
+		dish.zoneFoodCount[pellet.zone] -= 1
 	end
-	table.insert(foodRemoved, pellet.id)
+	table.insert(dish.foodRemoved, pellet.id)
 end
 
--- A random point in a zone's ring
-local function randomInZone(zone, margin)
-	local zones = Config.Zones
-	local outer = zones[zone].Outer - (margin or 4)
+-- A random point in a zone's ring (local coordinates)
+function World.randomInZone(dish, zone, margin)
+	local zones = dish.layout.zones
+	zone = math.clamp(zone, 1, #zones)
+	local outer = math.min(zones[zone].Outer, dish.wall) - (margin or 4)
 	local inner = 0
 	if zones[zone + 1] then
 		inner = zones[zone + 1].Outer + (margin or 4)
+	end
+	if inner >= outer then
+		inner = 0
 	end
 	local angle = math.random() * math.pi * 2
 	local dist = math.sqrt(math.random() * (outer * outer - inner * inner) + inner * inner)
 	return math.cos(angle) * dist, math.sin(angle) * dist
 end
-World.randomInZone = randomInZone
 
-local function refillFood()
-	for zone, info in Config.Zones do
-		local missing = info.FoodCount - (zoneFoodCount[zone] or 0)
-		for _ = 1, math.min(missing, 6) do
-			local x, z = randomInZone(zone)
-			addFood(x, z, info.FoodValue * SCALE, zone, false)
+function World.refillFood(dish)
+	for zone, info in dish.layout.zones do
+		local missing = info.FoodCount - (dish.zoneFoodCount[zone] or 0)
+		for _ = 1, math.min(missing, 8) do
+			local x, z = World.randomInZone(dish, zone)
+			addFood(dish, x, z, info.FoodValue * dish.scale, zone, false)
 		end
 	end
 end
 
-local function burstFood(x, z, total, spread)
+local function burstFood(dish, x, z, total, spread)
 	local count = Config.BurstPellets
 	local each = total / count
 	for i = 1, count do
@@ -125,44 +218,44 @@ local function burstFood(x, z, total, spread)
 		local d = spread * (0.6 + math.random() * 0.8)
 		local px, pz = x + math.cos(angle) * d, z + math.sin(angle) * d
 		local dist = math.sqrt(px * px + pz * pz)
-		if dist > Config.ArenaRadius - 3 then
-			local k = (Config.ArenaRadius - 3) / dist
-			px, pz = px * k, pz * k
+		local limit = dish.wall - 3
+		if dist > limit then
+			px, pz = px * limit / dist, pz * limit / dist
 		end
-		addFood(px, pz, each, nil, false)
+		addFood(dish, px, pz, each, nil, false)
 	end
 end
 
-function World.spawnGolden()
-	local zone = math.random(1, math.min(3, #Config.Zones))
-	local x, z = randomInZone(zone, 20)
-	addFood(x, z, Config.GoldenShare * HOST.SneezeSize, nil, true)
-	return Config.Zones[zone].Name
+function World.spawnGolden(dish)
+	local zones = dish.layout.zones
+	local zone = math.random(1, math.min(3, #zones))
+	local x, z = World.randomInZone(dish, zone, 20)
+	addFood(dish, x, z, Config.GoldenShare * dish.layout.sneeze, nil, true)
+	return zone
 end
 
 -- The closest pellet within a few grid squares that a germ of this size may reach
 -- (bots use this to graze).
-function World.nearestFood(x, z, reach, size)
+function World.nearestFood(dish, x, z, reach, size)
 	local minDist, maxDist = 0, math.huge
 	if size then
-		minDist, maxDist = Formulas.allowedRange(size)
+		minDist, maxDist = Formulas.allowedRange(size, dish.layout, dish.wall)
 	end
 	local cx, cz = cellOf(x), cellOf(z)
 	local n = math.max(1, math.ceil((reach or G) / G))
 	local best, bestD = nil, math.huge
 	for gx = cx - n, cx + n do
 		for gz = cz - n, cz + n do
-			local bucket = foodGrid[gridKey(gx, gz)]
+			local bucket = dish.foodGrid[gridKey(gx, gz)]
 			if bucket then
 				for _, pellet in bucket do
 					local dx, dz = pellet.x - x, pellet.z - z
 					local d = dx * dx + dz * dz
 					local fromCentre = pellet.x * pellet.x + pellet.z * pellet.z
 					if fromCentre < minDist * minDist or fromCentre > maxDist * maxDist then
-						d = math.huge -- in a zone this germ may not enter
-					end
-					if pellet.golden then
-						d *= 0.1 -- bots love golden food too
+						d = math.huge
+					elseif pellet.golden then
+						d *= 0.1
 					end
 					if d < bestD then
 						best, bestD = pellet, d
@@ -174,27 +267,19 @@ function World.nearestFood(x, z, reach, size)
 	return best
 end
 
-function World.foodList()
+function World.foodList(dish)
 	local list = {}
-	for id, p in food do
+	for id, p in dish.food do
 		table.insert(list, id)
-		table.insert(list, math.floor(p.x * 10) / 10)
-		table.insert(list, math.floor(p.z * 10) / 10)
-		table.insert(list, p.v)
+		table.insert(list, math.floor((p.x + dish.cx) * 10) / 10)
+		table.insert(list, math.floor((p.z + dish.cz) * 10) / 10)
+		table.insert(list, p.v / dish.scale)
 		table.insert(list, p.golden and 1 or 0)
 	end
 	return list
 end
 
--- Germs and cells ------------------------------------------------------------------
-
-local function queueInfo(germ)
-	infoQueue.germs[germ.id] = World.germInfo(germ)
-	for _, cell in germ.cells do
-		infoQueue.cells[cell.id] = germ.id
-	end
-	infoDirty = true
-end
+-- Germs and cells ------------------------------------------------------------------------------
 
 -- What clients need to draw a germ. (Bots and players look the same on purpose.)
 function World.germInfo(germ)
@@ -207,46 +292,52 @@ function World.germInfo(germ)
 		color = germ.color,
 		userId = germ.player and germ.player.UserId or 0,
 		muts = muts,
+		core = germ.core or "Blob",
+		skin = germ.skin, -- { Body, Pattern, Eyes, Mouth, Hat, Trail, Flag, Color2 }
+		npc = germ.npc and germ.npc.kind or nil,
+		vip = germ.vip,
+		tier = germ.mutant or 0,
 	}
 end
 
-function World.refreshInfo(germ)
-	queueInfo(germ)
-end
-
--- Recalculates bite / armour / thorns / speed from the equipped mutations.
-function World.applyMutations(germ)
-	local stats = { bite = 0, thorns = 0, armor = 0, speed = 0 }
-	for _, id in germ.equipped do
-		local m = Config.Mutations[id]
-		if m then
-			stats.bite += m.Bite or 0
-			stats.thorns += m.Thorns or 0
-			stats.armor += m.Armor or 0
-			stats.speed += m.Speed or 0
-		end
+local function queueInfo(germ)
+	local dish = germ.dish
+	if not dish then
+		return
 	end
+	dish.info.germs[germ.id] = World.germInfo(germ)
+	for _, cell in germ.cells do
+		dish.info.cells[cell.id] = germ.id
+	end
+	dish.infoDirty = true
+end
+World.refreshInfo = queueInfo
+
+-- Sets the germ's numbers (from Stats.compute) and tells clients about its look.
+function World.setStats(germ, stats)
 	germ.stats = stats
 	queueInfo(germ)
 end
 
--- germ fields set by the caller: name, color, player or bot, equipped
+-- germ fields set by the caller: name, color, player / bot / npc, equipped, stats
 function World.newGerm(fields)
 	local germ = fields
 	germ.id = newId()
 	germ.cells = {}
 	germ.alive = false
 	germ.equipped = germ.equipped or {}
-	germ.recentFeeds = {} -- [victimGermId] = { count, time }
+	germ.recentFeeds = {}
 	germ.dashUntil = 0
 	germ.dashReadyAt = 0
 	germ.splitReadyAt = 0
 	germ.shieldUntil = 0
 	germ.bubbleTime = 0
 	germ.quarantineUntil = germ.quarantineUntil or 0
-	germ.target = nil -- { x, z } world point the germ steers to
+	germ.abilityReady = {}
+	germ.effects = {} -- timed effects: [name] = untilTime
+	germ.target = nil
+	germ.stats = germ.stats or Stats.compute({ equipped = germ.equipped })
 	germs[germ.id] = germ
-	World.applyMutations(germ)
 	return germ
 end
 
@@ -266,7 +357,7 @@ function World.germSize(germ)
 	return total
 end
 
--- The middle of all of a germ's cells, weighted by size.
+-- The middle of all of a germ's cells, weighted by size (local coordinates).
 function World.germCentre(germ)
 	local sx, sz, total = 0, 0, 0
 	for _, cell in germ.cells do
@@ -281,44 +372,47 @@ function World.germCentre(germ)
 end
 
 local function addCell(germ, size, x, z)
+	local dish = germ.dish
 	local cell = {
 		id = newId(),
 		germ = germ,
+		dish = dish,
 		x = x,
 		z = z,
 		vx = 0,
 		vz = 0,
 		size = size,
-		r = Formulas.radius(size, SCALE),
+		r = Formulas.radius(size, dish.scale),
 		mergeAt = 0,
 	}
 	cells[cell.id] = cell
+	dish.cells[cell.id] = cell
 	germ.cells[cell.id] = cell
 	return cell
 end
 
 local function removeCell(cell)
 	cells[cell.id] = nil
+	cell.dish.cells[cell.id] = nil
 	cell.germ.cells[cell.id] = nil
-	table.insert(cellsGone, cell.id)
+	table.insert(cell.dish.cellsGone, cell.id)
 end
 
 -- A spawn point for a germ of this size: a spawn bubble in zone 1, otherwise a quiet spot
 -- in the deepest zone it may enter.
-function World.spawnPoint(size)
-	local zone = Formulas.deepestZone(size)
-	if zone == 1 and #World.bubbles > 0 then
-		local b = World.bubbles[math.random(1, #World.bubbles)]
+function World.spawnPoint(dish, size)
+	local zone = Formulas.deepestZone(size, dish.layout)
+	if zone == 1 and #dish.bubbles > 0 then
+		local b = dish.bubbles[math.random(1, #dish.bubbles)]
 		local a = math.random() * math.pi * 2
 		local d = math.random() * (Config.SpawnBubbleRadius * 0.5)
 		return b.x + math.cos(a) * d, b.z + math.sin(a) * d
 	end
-	-- try a few spots, keep the one farthest from anything that could eat us
 	local bestX, bestZ, bestScore = 0, 0, -1
 	for _ = 1, 8 do
-		local x, z = randomInZone(zone, 10)
+		local x, z = World.randomInZone(dish, math.max(zone, Formulas.shallowestZone(size, dish.layout)), 10)
 		local score = math.huge
-		for _, other in cells do
+		for _, other in dish.cells do
 			if Formulas.canEat(other.size, size) then
 				local dx, dz = other.x - x, other.z - z
 				score = math.min(score, dx * dx + dz * dz)
@@ -331,26 +425,28 @@ function World.spawnPoint(size)
 	return bestX, bestZ
 end
 
-function World.spawnGerm(germ, size)
+-- Puts a germ into a dish (removing it from where it was) with the given size.
+-- x, z (local) are optional.
+function World.spawnGerm(germ, dish, size, x, z)
+	local oldDish = germ.dish
 	for _, cell in germ.cells do
 		removeCell(cell)
 	end
-	local x, z = World.spawnPoint(size)
+	if oldDish and oldDish ~= dish and oldDish.crowned == germ then
+		oldDish.crowned = nil
+	end
+	germ.dish = dish
+	if not x then
+		x, z = World.spawnPoint(dish, size)
+	end
 	addCell(germ, size, x, z)
 	germ.alive = true
 	germ.target = { x = x, z = z }
 	germ.shieldUntil = now + Config.SpawnShieldSeconds
 	germ.bubbleTime = 0
 	germ.spawnedAt = now
+	germ.peakSize = size
 	queueInfo(germ)
-end
-
--- Removes a germ by popping it into food (used when a bot makes room for a real player).
-function World.popGerm(germ)
-	for _, cell in germ.cells do
-		burstFood(cell.x, cell.z, cell.size * 0.5, cell.r + 3)
-	end
-	World.removeGerm(germ)
 end
 
 function World.removeGerm(germ)
@@ -359,32 +455,93 @@ function World.removeGerm(germ)
 	end
 	germ.alive = false
 	germs[germ.id] = nil
-	if World.crowned == germ then
-		World.crowned = nil
+	if germ.dish and germ.dish.crowned == germ then
+		germ.dish.crowned = nil
 	end
 end
 
--- Moves ---------------------------------------------------------------------------------
+-- Takes a germ's cells out of its dish but keeps the germ (sneezing, changing dish)
+function World.despawn(germ)
+	for _, cell in germ.cells do
+		removeCell(cell)
+	end
+	germ.alive = false
+	if germ.dish and germ.dish.crowned == germ then
+		germ.dish.crowned = nil
+	end
+end
+
+-- Removes a germ by popping it into food (a bot making room for a real player).
+function World.popGerm(germ)
+	for _, cell in germ.cells do
+		burstFood(cell.dish, cell.x, cell.z, cell.size * 0.5, cell.r + 3)
+	end
+	World.removeGerm(germ)
+end
+
+-- Sets every cell of a germ to a total size (keeps the split ratio)
+function World.setGermSize(germ, size)
+	local total = World.germSize(germ)
+	if total <= 0 then
+		return
+	end
+	for _, cell in germ.cells do
+		cell.size = cell.size / total * size
+		cell.r = Formulas.radius(cell.size, cell.dish.scale)
+	end
+end
+
+-- Germs in a dish (alive)
+function World.dishGerms(dish)
+	local list = {}
+	local seen = {}
+	for _, cell in dish.cells do
+		if not seen[cell.germ] then
+			seen[cell.germ] = true
+			table.insert(list, cell.germ)
+		end
+	end
+	return list
+end
+
+-- Moves -----------------------------------------------------------------------------------------
+
+local function has(germ, effect)
+	return (germ.effects[effect] or 0) > now
+end
+World.hasEffect = has
+
+function World.addEffect(germ, effect, seconds)
+	germ.effects[effect] = math.max(germ.effects[effect] or 0, now + seconds)
+end
 
 function World.dash(germ)
-	if not germ.alive or now < germ.dashReadyAt then
+	if not germ.alive or now < germ.dashReadyAt or germ.npc then
 		return false
 	end
 	local d = Config.Dash
-	if World.germSize(germ) < d.MinSize then
+	if World.germSize(germ) < d.MinSize * germ.dish.scale then
 		return false
 	end
 	for _, cell in germ.cells do
 		cell.size -= cell.size * d.CostShare
 	end
-	germ.dashUntil = now + d.Duration
-	germ.dashReadyAt = now + d.Cooldown
+	local mult = germ.stats.dashMult
+	if germ.dish.effects.lowGravity then
+		mult *= 2
+	end
+	germ.dashUntil = now + d.Duration * mult
+	germ.dashReadyAt = now + germ.stats.dashCooldown
+	if germ.stats.fusions.Ninja then
+		World.addEffect(germ, "Ghost", 2)
+	end
+	germ.dashes = (germ.dashes or 0) + 1
 	return true
 end
 
 function World.split(germ)
 	local s = Config.Split
-	if not germ.alive or now < germ.splitReadyAt then
+	if not germ.alive or now < germ.splitReadyAt or germ.npc then
 		return false
 	end
 	local count, biggest = 0, nil
@@ -394,12 +551,12 @@ function World.split(germ)
 			biggest = cell
 		end
 	end
-	if count >= s.MaxCells or not biggest or biggest.size < s.MinSize then
+	if count >= s.MaxCells or not biggest or biggest.size < s.MinSize * germ.dish.scale then
 		return false
 	end
 	local half = biggest.size / 2
 	biggest.size = half
-	biggest.r = Formulas.radius(half, SCALE)
+	biggest.r = Formulas.radius(half, germ.dish.scale)
 	local dx, dz = 1, 0
 	if germ.target then
 		dx, dz = germ.target.x - biggest.x, germ.target.z - biggest.z
@@ -419,10 +576,60 @@ function World.split(germ)
 	return true
 end
 
--- Protection --------------------------------------------------------------------------
+-- Pushes a cell (studs per second, fades out)
+function World.impulse(cell, vx, vz)
+	cell.vx += vx
+	cell.vz += vz
+end
+
+-- Active abilities: slot "Front" (Q) or "Special" (R)
+function World.ability(germ, slot)
+	local active = germ.stats.actives[slot]
+	if not germ.alive or not active or now < (germ.abilityReady[slot] or 0) then
+		return false
+	end
+	germ.abilityReady[slot] = now + active.cooldown
+	local cx, cz = World.germCentre(germ)
+	local myR = Formulas.radius(World.germSize(germ), germ.dish.scale)
+	if active.id == "Chomp" then
+		World.addEffect(germ, "Chomp", 1)
+		local dx, dz = 0, 0
+		if germ.target then
+			dx, dz = germ.target.x - cx, germ.target.z - cz
+		end
+		local len = math.sqrt(dx * dx + dz * dz)
+		if len > 0.01 then
+			for _, cell in germ.cells do
+				World.impulse(cell, dx / len * 70, dz / len * 70)
+			end
+		end
+	elseif active.id == "Vacuum" or active.id == "GravityWell" then
+		World.addEffect(germ, active.id, 2)
+	elseif active.id == "Pierce" then
+		World.addEffect(germ, "Pierce", 3)
+	elseif active.id == "Ghost" then
+		World.addEffect(germ, "Ghost", 3)
+	elseif active.id == "Blast" then
+		for _, cell in germ.dish.cells do
+			if cell.germ ~= germ and not cell.germ.npc then
+				local dx, dz = cell.x - cx, cell.z - cz
+				local d = math.sqrt(dx * dx + dz * dz)
+				if d < myR * 5 + 10 and d > 0.01 then
+					World.impulse(cell, dx / d * 120, dz / d * 120)
+				end
+			end
+		end
+		if germ.stats.fusions.Storm then
+			World.addEffect(germ, "GravityWell", 2)
+		end
+	end
+	return true
+end
+
+-- Protection ------------------------------------------------------------------------------------
 
 local function inBubble(cell)
-	for _, b in World.bubbles do
+	for _, b in cell.dish.bubbles do
 		local dx, dz = cell.x - b.x, cell.z - b.z
 		if dx * dx + dz * dz <= Config.SpawnBubbleRadius * Config.SpawnBubbleRadius then
 			return true
@@ -431,7 +638,7 @@ local function inBubble(cell)
 	return false
 end
 
--- Germs that cannot eat other germs or be eaten right now.
+-- Germs that cannot be eaten right now.
 function World.isProtected(germ)
 	if now < germ.quarantineUntil or now < germ.shieldUntil then
 		return true
@@ -439,10 +646,12 @@ function World.isProtected(germ)
 	return germ.inBubble == true and germ.bubbleTime < Config.SpawnBubbleSeconds
 end
 
--- May this germ swallow that one right now? Protected germs cannot be eaten. A protected
--- player (quarantine, spawn shield, bubble) may still eat bots, so new players get their
--- first "I ate someone!" moment early, but cannot eat other players yet.
+-- May this germ swallow that one right now? A protected player (quarantine, spawn shield,
+-- bubble) may still eat bots, so new players get an early "I ate someone!" moment.
 local function mayEat(eater, prey)
+	if prey.npc or eater.npc and eater.npc.kind == "antibody" then
+		return false
+	end
 	if World.isProtected(prey) then
 		return false
 	end
@@ -453,74 +662,136 @@ local function mayEat(eater, prey)
 end
 World.mayEat = mayEat
 
--- Eating and fighting -----------------------------------------------------------------
+function World.isHidden(germ)
+	local dish = germ.dish
+	return dish ~= nil and dish.hidden[germ] == true
+end
+
+-- Eating and fighting ---------------------------------------------------------------------------
 
 local function eatCell(eaterCell, preyCell)
 	local eater, victim = eaterCell.germ, preyCell.germ
+	local dish = eaterCell.dish
 	local keep, burst = Formulas.eatSplit(preyCell.size)
-	eaterCell.size += keep
-	eaterCell.r = Formulas.radius(eaterCell.size, SCALE)
-	burstFood(preyCell.x, preyCell.z, burst, preyCell.r + 4)
+	eaterCell.size += keep * (eater.stats.growthMult or 1)
+	eaterCell.r = Formulas.radius(eaterCell.size, dish.scale)
+	burstFood(dish, preyCell.x, preyCell.z, burst, preyCell.r + 4)
 	local preySize = preyCell.size
 	removeCell(preyCell)
 
-	-- rewards
 	local feeds = eater.recentFeeds[victim.id]
 	if feeds and now - feeds.time > Config.FeedWindowSeconds then
 		feeds = nil
 	end
 	local revenge = eater.revengeOn == victim.id and now < (eater.revengeUntil or 0)
-	local crowned = World.crowned == victim
+	local crowned = dish.crowned == victim
 	local dna = Formulas.killDna(preySize, {
+		scale = dish.scale,
 		revenge = revenge,
 		crowned = crowned,
 		crownedSeconds = crowned and (now - (victim.crownedSince or now)) or 0,
 		recentFeeds = feeds and feeds.count or 0,
+		mult = (eater.stats.dnaMult or 1) * dish.effects.dnaMult,
 	})
 	World.hooks.gainDna(eater, dna)
 	eater.shieldUntil = 0 -- attacking ends your spawn shield
 
 	if next(victim.cells) == nil then
 		victim.alive = false
-		victim.sizeAtDeath = (victim.peakSize or preySize)
+		victim.sizeAtDeath = victim.peakSize or preySize
 		victim.revengeOn = eater.id
 		victim.revengeUntil = now + Config.RevengeSeconds
 		eater.recentFeeds[victim.id] = { count = (feeds and feeds.count or 0) + 1, time = now }
-		if World.crowned == victim then
-			World.crowned = nil
+		if dish.crowned == victim then
+			dish.crowned = nil
 		end
 		World.hooks.ateGerm(eater, victim, { dna = dna, revenge = revenge, crowned = crowned })
 		World.hooks.germDied(victim, eater)
 	end
 end
 
-local function fightStats(germ, otherGerm)
-	local mult = 1
-	if germ.bot and otherGerm.isNewPlayer then
-		mult = Config.Bots.NewPlayerDamageMult
+local function attackStats(germ, other)
+	local s = germ.stats
+	local mult = germ.dish.effects.damageMult
+	if germ.bot and other.isNewPlayer then
+		mult *= Config.Bots.NewPlayerDamageMult
 	end
-	return germ.stats.bite, germ.stats.thorns, germ.stats.armor, mult
+	local bite = s.bite
+	if has(germ, "Chomp") then
+		bite = (1 + bite) * 3 - 1
+	end
+	local thorns = s.thorns
+	if s.fusions.Buzzsaw and now < germ.dashUntil then
+		thorns *= 3
+	end
+	local pierce = s.pierce
+	if has(germ, "Pierce") or (s.fusions.Driller and now < germ.dashUntil) then
+		pierce = 1
+	end
+	return { bite = bite, thorns = thorns, mult = mult, pierce = pierce }
+end
+
+local function defenceArmor(germ)
+	local armor = germ.stats.armor
+	if next(germ.cells, next(germ.cells)) ~= nil then -- split into 2+ cells
+		armor += germ.stats.splitArmor
+	end
+	return armor
+end
+
+local function poison(target, attacker)
+	if attacker.stats.poison > 0 then
+		target.poisonRate = math.max(target.poisonRate or 0, attacker.stats.poison)
+		World.addEffect(target, "Poison", 3)
+	end
 end
 
 local function fight(a, b, dt)
-	local biteA, thornsA, armorA, multA = fightStats(a.germ, b.germ)
-	local biteB, thornsB, armorB, multB = fightStats(b.germ, a.germ)
-	local toB = Formulas.fightDamage(
-		{ size = a.size, bite = biteA, thorns = thornsA, mult = multA },
-		{ size = b.size, armor = armorB },
-		dt
-	)
-	local toA = Formulas.fightDamage(
-		{ size = b.size, bite = biteB, thorns = thornsB, mult = multB },
-		{ size = a.size, armor = armorA },
-		dt
-	)
+	local sa, sb = attackStats(a.germ, b.germ), attackStats(b.germ, a.germ)
+	sa.size, sb.size = a.size, b.size
+	local toB = Formulas.fightDamage(sa, { size = b.size, armor = defenceArmor(b.germ) }, dt)
+	local toA = Formulas.fightDamage(sb, { size = a.size, armor = defenceArmor(a.germ) }, dt)
 	a.size += toB * Config.FightStealShare - toA
 	b.size += toA * Config.FightStealShare - toB
 	a.fighting, b.fighting = true, true
+	poison(b.germ, a.germ)
+	poison(a.germ, b.germ)
 end
 
--- Pushes two overlapping cells apart a little so they do not sit inside each other.
+-- Touching an immune boss: it drains you, you damage its health.
+local function bossContact(bossCell, otherCell, dt)
+	local boss, other = bossCell.germ, otherCell.germ
+	local npc = boss.npc
+	if npc.kind == "antibody" then
+		if not other.npc and not World.isProtected(other) then
+			World.addEffect(other, "Slow", Config.Immune.Antibodies.SlowSeconds)
+			World.hooks.gainDna(other, Config.Immune.Antibodies.Dna)
+			npc.popped = true
+		end
+		return
+	end
+	if other.npc then
+		return
+	end
+	if Formulas.canEat(bossCell.size, otherCell.size) and not World.isProtected(other) then
+		local dx, dz = otherCell.x - bossCell.x, otherCell.z - bossCell.z
+		if Formulas.isSwallowed(math.sqrt(dx * dx + dz * dz), bossCell.r, otherCell.r) then
+			eatCell(bossCell, otherCell)
+			return
+		end
+	end
+	if not World.isProtected(other) then
+		local drain = otherCell.size * npc.drain * (1 - math.max(0, defenceArmor(other))) * dt
+		otherCell.size -= drain
+	end
+	local s = attackStats(other, boss)
+	local dmg = Formulas.bossDamage(otherCell.size, s.bite, dt) + otherCell.size * s.thorns * dt
+	npc.hp -= dmg
+	npc.damageBy[other] = (npc.damageBy[other] or 0) + dmg
+	bossCell.fighting, otherCell.fighting = true, true
+	World.hooks.bossHit(boss, other, dmg)
+end
+
 local function separate(a, b, dist, strength)
 	local overlap = a.r + b.r - dist
 	if overlap <= 0 then
@@ -537,53 +808,61 @@ local function separate(a, b, dist, strength)
 	b.z += dz / dist * push
 end
 
-local function interact(dt)
+local function interact(dish, dt)
 	local list = {}
-	for _, cell in cells do
+	for _, cell in dish.cells do
 		cell.fighting = false
 		table.insert(list, cell)
 	end
 	for i = 1, #list do
 		local a = list[i]
-		if cells[a.id] then
-			for j = i + 1, #list do
-				local b = list[j]
-				if cells[b.id] and cells[a.id] then
-					local dx, dz = b.x - a.x, b.z - a.z
-					local dist = math.sqrt(dx * dx + dz * dz)
-					if dist < a.r + b.r then
-						if a.germ == b.germ then
-							if now >= a.mergeAt and now >= b.mergeAt then
-								if dist < math.max(a.r, b.r) then
-									local big, small = a, b
-									if b.size > a.size then
-										big, small = b, a
-									end
-									big.size += small.size
-									big.r = Formulas.radius(big.size, SCALE)
-									removeCell(small)
+		for j = i + 1, #list do
+			local b = list[j]
+			if cells[a.id] and cells[b.id] then
+				local dx, dz = b.x - a.x, b.z - a.z
+				local dist = math.sqrt(dx * dx + dz * dz)
+				if dist < a.r + b.r then
+					local ga, gb = a.germ, b.germ
+					if ga == gb then
+						if now >= a.mergeAt and now >= b.mergeAt then
+							if dist < math.max(a.r, b.r) then
+								local big, small = a, b
+								if b.size > a.size then
+									big, small = b, a
 								end
-							else
-								separate(a, b, dist, 0.5)
+								big.size += small.size
+								big.r = Formulas.radius(big.size, dish.scale)
+								removeCell(small)
 							end
-						elseif Formulas.canEat(a.size, b.size) then
-							if mayEat(a.germ, b.germ) and Formulas.isSwallowed(dist, a.r, b.r) then
-								eatCell(a, b)
-							elseif not mayEat(a.germ, b.germ) then
-								separate(a, b, dist, 0.3)
-							end
-						elseif Formulas.canEat(b.size, a.size) then
-							if mayEat(b.germ, a.germ) and Formulas.isSwallowed(dist, b.r, a.r) then
-								eatCell(b, a)
-							elseif not mayEat(b.germ, a.germ) then
-								separate(a, b, dist, 0.3)
-							end
-						elseif not World.isProtected(a.germ) and not World.isProtected(b.germ) then
-							fight(a, b, dt)
-							separate(a, b, dist, 0.3)
 						else
+							separate(a, b, dist, 0.5)
+						end
+					elseif ga.npc or gb.npc then
+						if ga.npc and not gb.npc then
+							bossContact(a, b, dt)
+						elseif gb.npc and not ga.npc then
+							bossContact(b, a, dt)
+						end
+						if cells[a.id] and cells[b.id] then
+							separate(a, b, dist, 0.15)
+						end
+					elseif Formulas.canEat(a.size, b.size, ga.stats.eatRatio) then
+						if mayEat(ga, gb) and Formulas.isSwallowed(dist, a.r, b.r) then
+							eatCell(a, b)
+						elseif not mayEat(ga, gb) then
 							separate(a, b, dist, 0.3)
 						end
+					elseif Formulas.canEat(b.size, a.size, gb.stats.eatRatio) then
+						if mayEat(gb, ga) and Formulas.isSwallowed(dist, b.r, a.r) then
+							eatCell(b, a)
+						elseif not mayEat(gb, ga) then
+							separate(a, b, dist, 0.3)
+						end
+					elseif not World.isProtected(ga) and not World.isProtected(gb) then
+						fight(a, b, dt)
+						separate(a, b, dist, 0.3)
+					else
+						separate(a, b, dist, 0.3)
 					end
 				end
 			end
@@ -592,43 +871,65 @@ local function interact(dt)
 end
 
 local function eatFood(cell)
-	local r = cell.r
-	local gx0, gx1 = cellOf(cell.x - r), cellOf(cell.x + r)
-	local gz0, gz1 = cellOf(cell.z - r), cellOf(cell.z + r)
-	local gained, dna = 0, 0
+	local dish = cell.dish
+	local germ = cell.germ
+	if germ.npc then
+		return
+	end
+	local reach = cell.r + (germ.stats.magnet or 0)
+	if has(germ, "GravityWell") then
+		reach += 25
+	end
+	local gx0, gx1 = cellOf(cell.x - reach), cellOf(cell.x + reach)
+	local gz0, gz1 = cellOf(cell.z - reach), cellOf(cell.z + reach)
+	local gained, dna, count, golden = 0, 0, 0, false
 	for gx = gx0, gx1 do
 		for gz = gz0, gz1 do
-			local bucket = foodGrid[gridKey(gx, gz)]
+			local bucket = dish.foodGrid[gridKey(gx, gz)]
 			if bucket then
 				for _, pellet in bucket do
 					local dx, dz = pellet.x - cell.x, pellet.z - cell.z
-					if dx * dx + dz * dz <= r * r then
+					if dx * dx + dz * dz <= reach * reach then
 						gained += pellet.v
-						dna += pellet.v / SCALE * Config.DnaPerFood
+						dna += pellet.v / dish.scale * Config.DnaPerFood
+						count += 1
 						if pellet.golden then
-							cell.germ.ateGolden = true
+							golden = true
 						end
-						removeFood(pellet)
+						removeFood(dish, pellet)
 					end
 				end
 			end
 		end
 	end
 	if gained > 0 then
-		cell.size += gained
-		cell.r = Formulas.radius(cell.size, SCALE)
-		cell.germ.dnaPending = (cell.germ.dnaPending or 0) + dna
+		cell.size += gained * germ.stats.foodMult * dish.effects.foodMult
+		cell.r = Formulas.radius(cell.size, dish.scale)
+		germ.dnaPending = (germ.dnaPending or 0) + dna * germ.stats.dnaMult * dish.effects.dnaMult
+		World.hooks.ateFood(germ, count, golden)
 	end
 end
 
--- Movement ---------------------------------------------------------------------------------
+-- Movement ----------------------------------------------------------------------------------------
 
 local function moveCell(cell, dt)
 	local germ = cell.germ
+	local dish = cell.dish
 	local total = World.germSize(germ)
-	local speed = Formulas.speed(cell.size, SCALE, 1 + germ.stats.speed)
-	if now < germ.dashUntil then
-		speed *= Config.Dash.SpeedMult
+	local speed
+	if germ.npc then
+		speed = germ.npc.speed
+	else
+		speed = Formulas.speed(cell.size, dish.scale, 1 + germ.stats.speed)
+		if now < germ.dashUntil then
+			speed *= Config.Dash.SpeedMult
+		end
+		if has(germ, "Slow") then
+			speed *= Config.Immune.Antibodies.SlowMult
+		end
+		if germ.trailSlow then
+			speed *= 1 - germ.trailSlow
+		end
 	end
 	if germ.slowMult then
 		speed *= germ.slowMult
@@ -638,13 +939,24 @@ local function moveCell(cell, dt)
 		local dx, dz = target.x - cell.x, target.z - cell.z
 		local len = math.sqrt(dx * dx + dz * dz)
 		if len > 0.5 then
-			-- slow down near the target so the germ does not jitter around the mouse
 			local step = math.min(speed * dt, len) * math.min(1, len / (cell.r + 2))
 			cell.x += dx / len * step
 			cell.z += dz / len * step
 		end
 	end
-	-- launch speed after a split fades out quickly
+	-- dish currents (drool, suction, magnet storm)
+	local fx = dish.effects
+	if fx.pushX ~= 0 or fx.pushZ ~= 0 then
+		cell.x += fx.pushX * dt
+		cell.z += fx.pushZ * dt
+	end
+	if fx.pull ~= 0 then
+		local d = math.sqrt(cell.x * cell.x + cell.z * cell.z)
+		if d > 1 then
+			cell.x -= cell.x / d * fx.pull * dt
+			cell.z -= cell.z / d * fx.pull * dt
+		end
+	end
 	if cell.vx ~= 0 or cell.vz ~= 0 then
 		cell.x += cell.vx * dt
 		cell.z += cell.vz * dt
@@ -655,14 +967,20 @@ local function moveCell(cell, dt)
 			cell.vx, cell.vz = 0, 0
 		end
 	end
-	-- stay inside the zones this germ may enter
+	-- stay inside the zones this germ may enter (NPCs keep to their own zones)
 	local dist = math.sqrt(cell.x * cell.x + cell.z * cell.z)
-	local allowed = Formulas.clampDistance(dist, total, cell.r)
+	local sizeForZones = total
+	if germ.npc then
+		sizeForZones = dish.layout.sneeze -- may go anywhere
+	end
+	local allowed = Formulas.clampDistance(dist, sizeForZones, cell.r, dish.layout, dish.wall)
+	if germ.npc and germ.npc.minDist then
+		allowed = math.max(allowed, math.min(germ.npc.minDist, dish.wall - cell.r))
+	end
 	if math.abs(allowed - dist) > 0.001 then
 		if dist < 0.001 then
 			cell.x, cell.z = allowed, 0
 		else
-			-- move part of the way each tick so being coughed out looks smooth
 			local k = (dist + (allowed - dist) * math.min(1, dt * 10)) / dist
 			cell.x *= k
 			cell.z *= k
@@ -670,22 +988,29 @@ local function moveCell(cell, dt)
 	end
 end
 
--- Snapshot -----------------------------------------------------------------------------
+-- Snapshot ------------------------------------------------------------------------------------------
 
-local FLAG_CROWN, FLAG_PROTECTED, FLAG_DASH, FLAG_FIGHT = 1, 2, 4, 8
+local FLAG_CROWN, FLAG_PROTECTED, FLAG_DASH, FLAG_FIGHT, FLAG_HIDDEN, FLAG_SLOW, FLAG_POISON = 1, 2, 4, 8, 16, 32, 64
 
-local function sendSnapshot()
+local function sendSnapshot(dish)
+	if next(dish.viewers) == nil then
+		dish.info = { cells = {}, germs = {} }
+		dish.infoDirty = false
+		dish.cellsGone, dish.foodAdded, dish.foodRemoved = {}, {}, {}
+		return
+	end
 	local count = 0
-	for _ in cells do
+	for _ in dish.cells do
 		count += 1
 	end
-	local buf = buffer.create(4 + count * 17)
+	local buf = buffer.create(8 + count * 17)
 	buffer.writef32(buf, 0, now)
-	local offset = 4
-	for id, cell in cells do
+	buffer.writeu32(buf, 4, dish.id)
+	local offset = 8
+	for id, cell in dish.cells do
 		local germ = cell.germ
 		local flags = 0
-		if World.crowned == germ then
+		if dish.crowned == germ then
 			flags += FLAG_CROWN
 		end
 		if World.isProtected(germ) then
@@ -697,151 +1022,268 @@ local function sendSnapshot()
 		if cell.fighting then
 			flags += FLAG_FIGHT
 		end
+		if dish.hidden[germ] then
+			flags += FLAG_HIDDEN
+		end
+		if has(germ, "Slow") then
+			flags += FLAG_SLOW
+		end
+		if has(germ, "Poison") then
+			flags += FLAG_POISON
+		end
 		buffer.writeu32(buf, offset, id)
-		buffer.writef32(buf, offset + 4, cell.x)
-		buffer.writef32(buf, offset + 8, cell.z)
-		buffer.writef32(buf, offset + 12, cell.size)
+		buffer.writef32(buf, offset + 4, cell.x + dish.cx)
+		buffer.writef32(buf, offset + 8, cell.z + dish.cz)
+		buffer.writef32(buf, offset + 12, cell.size / dish.scale)
 		buffer.writeu8(buf, offset + 16, flags)
 		offset += 17
 	end
-	if infoDirty then
-		Net.CellInfo:FireAllClients(infoQueue)
-		infoQueue = { cells = {}, germs = {} }
-		infoDirty = false
+	if dish.infoDirty then
+		fireDish(dish, Net.CellInfo, dish.info)
+		dish.info = { cells = {}, germs = {} }
+		dish.infoDirty = false
 	end
-	if #cellsGone > 0 then
-		Net.CellGone:FireAllClients(cellsGone)
-		cellsGone = {}
+	if #dish.cellsGone > 0 then
+		fireDish(dish, Net.CellGone, dish.cellsGone)
+		dish.cellsGone = {}
 	end
-	if #foodAdded > 0 or #foodRemoved > 0 then
-		Net.FoodDelta:FireAllClients(foodAdded, foodRemoved)
-		foodAdded, foodRemoved = {}, {}
+	if #dish.foodAdded > 0 or #dish.foodRemoved > 0 then
+		fireDish(dish, Net.FoodDelta, dish.foodAdded, dish.foodRemoved)
+		dish.foodAdded, dish.foodRemoved = {}, {}
 	end
-	Net.Snapshot:FireAllClients(buf)
+	fireDish(dish, Net.Snapshot, buf)
 end
 
--- Everything a player who just joined needs to draw the world.
-function World.fullState()
+-- Everything a player needs to draw a dish (on joining it).
+function World.fullState(dish)
 	local info = { cells = {}, germs = {} }
-	for _, germ in germs do
-		info.germs[germ.id] = World.germInfo(germ)
-		for _, cell in germ.cells do
-			info.cells[cell.id] = germ.id
+	for _, cell in dish.cells do
+		info.germs[cell.germ.id] = World.germInfo(cell.germ)
+		info.cells[cell.id] = cell.germ.id
+	end
+	return info, World.foodList(dish)
+end
+
+-- The tick -------------------------------------------------------------------------------------------
+
+local function stepDish(dish, dt)
+	dish.tick += 1
+	local layout = dish.layout
+	World.hooks.dishTick(dish, dt)
+
+	-- the outer wall moves smoothly (Medicine drop, Arena sudden death)
+	if dish.wall ~= dish.wallTarget then
+		local d = dish.wallTarget - dish.wall
+		local step = math.max(2, math.abs(d)) * dt * 0.6
+		if math.abs(d) <= step then
+			dish.wall = dish.wallTarget
+		else
+			dish.wall += step * math.sign(d)
 		end
 	end
-	return info, World.foodList()
-end
 
--- The tick ------------------------------------------------------------------------------
-
-local tickCount = 0
-local crownTimer = 0
-
-function World.step(dt)
-	now += dt
-	tickCount += 1
-
-	for _, germ in germs do
-		if germ.alive then
-			local inside = false
-			for _, cell in germ.cells do
-				moveCell(cell, dt)
-				if inBubble(cell) then
-					inside = true
+	-- slime trails: germs right behind a slimy germ are slowed
+	for _, cell in dish.cells do
+		cell.germ.trailSlow = nil
+	end
+	for _, cell in dish.cells do
+		local s = cell.germ.stats
+		if s and s.trail > 0 then
+			for _, other in dish.cells do
+				if other.germ ~= cell.germ and not other.germ.npc then
+					local dx, dz = other.x - cell.x, other.z - cell.z
+					if dx * dx + dz * dz < (cell.r * 3) ^ 2 then
+						other.germ.trailSlow = math.max(other.germ.trailSlow or 0, s.trail)
+						if s.fusions.PlagueTrail then
+							other.germ.poisonRate = math.max(other.germ.poisonRate or 0, 0.01)
+							World.addEffect(other.germ, "Poison", 2)
+						end
+					end
 				end
-				local decay = Formulas.decay(cell.size, dt)
+			end
+		end
+	end
+
+	-- vacuum / gravity well pull smaller germs in
+	for _, cell in dish.cells do
+		local germ = cell.germ
+		if not germ.npc and (has(germ, "Vacuum") or has(germ, "GravityWell")) then
+			for _, other in dish.cells do
+				if other.germ ~= germ and not other.germ.npc and other.size < cell.size then
+					local dx, dz = cell.x - other.x, cell.z - other.z
+					local d = math.sqrt(dx * dx + dz * dz)
+					if d < cell.r * 6 + 20 and d > 0.1 then
+						other.x += dx / d * 18 * dt
+						other.z += dz / d * 18 * dt
+					end
+				end
+			end
+		end
+	end
+
+	local hidden = {}
+	for _, germ in World.dishGerms(dish) do
+		local inside = false
+		for _, cell in germ.cells do
+			moveCell(cell, dt)
+			if inBubble(cell) then
+				inside = true
+			end
+			if not germ.npc then
+				local decay = Formulas.decay(cell.size, dt, layout)
 				if decay > 0 then
 					cell.size -= decay
 				end
-			end
-			germ.inBubble = inside
-			if inside then
-				germ.bubbleTime += dt
+				-- poison, burning outer ring, Arena spikes
+				if has(germ, "Poison") then
+					cell.size -= cell.size * (germ.poisonRate or 0) * dt
+				end
+				local dist = math.sqrt(cell.x * cell.x + cell.z * cell.z)
+				if dish.effects.burnFrom and dist > dish.effects.burnFrom and not World.isProtected(germ) then
+					cell.size -= cell.size * dish.effects.burnRate * dt
+				end
+				for _, spike in dish.spikes do
+					local dx, dz = cell.x - spike.x, cell.z - spike.z
+					if dx * dx + dz * dz < (spike.r + cell.r) ^ 2 then
+						cell.size -= cell.size * 0.05 * dt
+					end
+				end
+				-- ink clouds hide germs; camo hides still germs
+				for _, cloud in dish.ink do
+					local dx, dz = cell.x - cloud.x, cell.z - cloud.z
+					if dx * dx + dz * dz < cloud.r * cloud.r then
+						hidden[germ] = true
+					end
+				end
 			end
 		end
-	end
-
-	interact(dt)
-
-	for _, cell in cells do
-		eatFood(cell)
-		if cell.size < Config.MinSize then
-			cell.size = Config.MinSize
+		if germ.stats and germ.stats.camo and germ.target then
+			local cx, cz = World.germCentre(germ)
+			local dx, dz = germ.target.x - cx, germ.target.z - cz
+			if dx * dx + dz * dz < 4 then
+				germ.stillSince = germ.stillSince or now
+				if now - germ.stillSince > 1.5 then
+					hidden[germ] = true
+				end
+			else
+				germ.stillSince = nil
+			end
+		end
+		if has(germ, "Ghost") then
+			hidden[germ] = true
+		end
+		germ.inBubble = inside
+		if inside then
+			germ.bubbleTime += dt
 		end
 	end
+	dish.hidden = hidden
 
-	-- size caps (no sneeze in Phase 1; bots stay below the sneeze size)
-	for _, germ in germs do
-		if germ.alive then
-			local cap = HOST.SneezeSize * Config.MaxSizeShare
-			if germ.bot and not germ.bot.uncapped then
-				cap = HOST.SneezeSize * Config.Bots.MaxSizeShare
-			end
-			local size = World.germSize(germ)
-			if size > cap then
-				local k = cap / size
-				for _, cell in germ.cells do
-					cell.size *= k
+	-- warp holes
+	for _, cell in dish.cells do
+		local germ = cell.germ
+		if not germ.npc and now >= (germ.warpReady or 0) then
+			for _, hole in dish.warps do
+				local dx, dz = cell.x - hole.x, cell.z - hole.z
+				if dx * dx + dz * dz < hole.r * hole.r then
+					local to = dish.warps[hole.to]
+					for _, c in germ.cells do
+						c.x, c.z = to.x + (c.x - cell.x), to.z + (c.z - cell.z)
+					end
+					germ.warpReady = now + Config.Hazards.Warp.Cooldown
+					break
 				end
 			end
 		end
 	end
-	for _, cell in cells do
-		cell.r = Formulas.radius(cell.size, SCALE)
+
+	interact(dish, dt)
+
+	for _, cell in dish.cells do
+		eatFood(cell)
+		local min = Config.MinSize * dish.scale
+		if cell.size < min and not cell.germ.npc then
+			cell.size = min
+		end
 	end
 
-	for _, germ in germs do
-		if germ.alive then
+	-- size caps (players must sneeze; bots stay below the sneeze size)
+	local nerveR = Config.NerveRadius
+	for _, germ in World.dishGerms(dish) do
+		if not germ.npc then
+			local cap = layout.sneeze * Config.MaxSizeShare
+			if germ.bot and not germ.bot.uncapped then
+				cap = layout.sneeze * Config.Bots.MaxSizeShare
+			end
 			local size = World.germSize(germ)
+			if size > cap then
+				World.setGermSize(germ, cap)
+				size = cap
+			end
 			germ.peakSize = size
 			if germ.dnaPending and germ.dnaPending >= 1 then
 				local whole = math.floor(germ.dnaPending)
 				germ.dnaPending -= whole
 				World.hooks.gainDna(germ, whole)
 			end
+			-- the Sneeze Nerve
+			if size >= layout.sneeze and not germ.bot then
+				for _, cell in germ.cells do
+					if cell.x * cell.x + cell.z * cell.z < (nerveR + cell.r) ^ 2 then
+						World.hooks.sneeze(germ)
+						break
+					end
+				end
+			end
+		else
+			-- antibodies pop after touching someone, bosses die at 0 health
+			if germ.npc.popped then
+				World.removeGerm(germ)
+			elseif germ.npc.hp and germ.npc.hp <= 0 then
+				local damageBy = germ.npc.damageBy
+				World.removeGerm(germ)
+				World.hooks.bossDefeated(germ, damageBy)
+			end
 		end
 	end
+	for _, cell in dish.cells do
+		cell.r = Formulas.radius(cell.size, dish.scale)
+	end
 
-	-- the crown goes to the biggest germ
-	crownTimer += dt
-	if crownTimer >= 1 then
-		crownTimer = 0
+	-- the crown goes to the biggest germ (players and bots)
+	if dish.tick % Config.TickRate == 0 then
 		local best, bestSize = nil, 0
-		for _, germ in germs do
-			if germ.alive then
+		for _, germ in World.dishGerms(dish) do
+			if not germ.npc then
 				local size = World.germSize(germ)
 				if size > bestSize then
 					best, bestSize = germ, size
 				end
 			end
 		end
-		if best ~= World.crowned then
-			World.crowned = best
+		if best ~= dish.crowned then
+			dish.crowned = best
 			if best then
 				best.crownedSince = now
 			end
 		end
 	end
 
-	refillFood()
+	World.refillFood(dish)
 
-	if tickCount % Config.SnapshotEvery == 0 then
-		sendSnapshot()
+	if dish.tick % Config.SnapshotEvery == 0 then
+		sendSnapshot(dish)
+	end
+end
+
+function World.step(dt)
+	now += dt
+	for _, dish in dishes do
+		stepDish(dish, dt)
 	end
 end
 
 function World.start()
-	-- six spawn bubbles around the outer ring
-	for i = 1, 6 do
-		local a = (i / 6) * math.pi * 2
-		local d = Config.ArenaRadius - Config.SpawnBubbleRadius - 30
-		table.insert(World.bubbles, { x = math.cos(a) * d, z = math.sin(a) * d })
-	end
-	for _ = 1, 100 do
-		refillFood()
-	end
-	foodAdded, foodRemoved = {}, {}
-
 	local RunService = game:GetService("RunService")
 	local step = 1 / Config.TickRate
 	local acc = 0
@@ -849,7 +1291,10 @@ function World.start()
 		acc += math.min(dt, 0.25)
 		while acc >= step do
 			acc -= step
-			World.step(step)
+			local ok, err = pcall(World.step, step)
+			if not ok then
+				warn("[World] " .. tostring(err))
+			end
 		end
 	end)
 end
