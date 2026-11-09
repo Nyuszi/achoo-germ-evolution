@@ -337,6 +337,7 @@ local function sneeze(germ)
 		mutantUp = mutantUp,
 		core = (not mutantUp and core ~= "Blob") and Config.Cores[core].Name or nil,
 		arenaUnlocked = mutantUp and data.Mutant == Config.Arena.UnlockMutant,
+		sneezeCam = PlayerService.ownsPass(player, "SneezeCam"),
 	})
 	Bus.fire("Sneeze", player, { from = from, to = to, mutantUp = mutantUp })
 	if not data.FavoritePrompted then
@@ -347,7 +348,8 @@ local function sneeze(germ)
 			end
 		end)
 	end
-	task.delay(3, function()
+	local camSeconds = PlayerService.ownsPass(player, "SneezeCam") and 2 or 0
+	task.delay(3 + camSeconds, function()
 		germ.sneezing = false
 		if germOf[player] == germ and player.Parent then
 			PlayerService.goHost(player)

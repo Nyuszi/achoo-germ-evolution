@@ -290,8 +290,8 @@ Config.GamePasses = {
 	Vaccine = { Id = 0, Price = 99, Name = "Vaccine", Text = "Come back with 75% of your size instead of 50%" },
 	FastGrowth = { Id = 0, Price = 249, Name = "Fast Growth", Text = "+50% food value in hosts" },
 	ExtraLoadout = { Id = 0, Price = 79, Name = "Extra Loadouts", Text = "Save 3 mutation builds" },
-	VIP = { Id = 0, Price = 299, Name = "VIP Germ", Text = "Golden name, +10% DNA, a free card every day" },
-	SneezeCam = { Id = 0, Price = 49, Name = "Sneeze Cam", Text = "Slow-motion sneeze replay with sticker frames" },
+	VIP = { Id = 0, Price = 299, Name = "VIP Germ", Text = "Golden name and +10% DNA" },
+	SneezeCam = { Id = 0, Price = 49, Name = "Sneeze Cam", Text = "A longer sneeze moment with a sticker photo frame" },
 	AutoCollect = { Id = 0, Price = 149, Name = "Auto Collect", Text = "Pulls nearby food to you (not germs)" },
 }
 Config.GamePassOrder = { "DoubleDna", "Vaccine", "FastGrowth", "AutoCollect", "VIP", "ExtraLoadout", "SneezeCam" }

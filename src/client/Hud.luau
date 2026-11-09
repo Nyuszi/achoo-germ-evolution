@@ -208,11 +208,26 @@ function Hud.sneeze(data)
 		end)
 	end
 	TweenService:Create(sneezeScreen, TweenInfo.new(1.2), { BackgroundColor3 = Color3.fromRGB(30, 20, 40), BackgroundTransparency = 0.15 }):Play()
-	task.delay(2.2, function()
+	local extra = data.sneezeCam and 2 or 0
+	local frame = nil
+	if data.sneezeCam then
+		-- Sneeze Cam: a sticker photo frame around the moment (screenshot it!)
+		frame = make("Frame", { Size = UDim2.fromScale(0.8, 0.7), Position = UDim2.fromScale(0.1, 0.12), BackgroundTransparency = 1, ZIndex = 31, Parent = sneezeScreen }, { Ui.stroke(10), corner(24) })
+		frame:FindFirstChildOfClass("UIStroke").Color = colors[2]
+		for i, sticker in { "🤧", "💥", "🦠", "✨", "📸", "🎉" } do
+			local a = (i / 6) * math.pi * 2
+			text({ Size = UDim2.fromOffset(70, 70), Position = UDim2.new(0.5 + math.cos(a) * 0.42, -35, 0.47 + math.sin(a) * 0.4, -35), Text = sticker, ZIndex = 33, Parent = frame })
+		end
+		text({ Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 1, -40), Text = "📸 SNEEZE CAM · " .. player.DisplayName .. " · sneeze #" .. data.sneezes, ZIndex = 33, Parent = frame })
+	end
+	task.delay(2.2 + extra / 2, function()
 		sneezeBig.Text = "Welcome inside"
 		sneezeSub.Text = data.to .. "!"
 	end)
-	task.delay(4.2, function()
+	task.delay(4.2 + extra, function()
+		if frame then
+			frame:Destroy()
+		end
 		TweenService:Create(sneezeScreen, TweenInfo.new(0.8), { BackgroundTransparency = 1 }):Play()
 		task.wait(0.8)
 		sneezeScreen.Visible = false
