@@ -298,13 +298,18 @@ local function think(germ, brain)
 	end
 end
 
+local function thinkAndSteer(germ, brain)
+	think(germ, brain)
+	World.avoidBushes(germ)
+end
+
 function BotService.start()
 	task.spawn(function()
 		while true do
 			task.wait(B.ThinkSeconds)
 			for germ, brain in bots do
 				if germ.alive then
-					local ok, err = pcall(think, germ, brain)
+					local ok, err = pcall(thinkAndSteer, germ, brain)
 					if not ok then
 						warn("[Bots] " .. tostring(err))
 					end
@@ -340,7 +345,7 @@ function BotService.start()
 	end)
 end
 
-BotService.think = think -- used by tools/sim-server.js
+BotService.think = thinkAndSteer -- used by tools/sim-server.js
 
 function BotService.isBot(germ)
 	return bots[germ] ~= nil

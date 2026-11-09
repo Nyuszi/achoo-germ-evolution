@@ -12,7 +12,7 @@ local Gear = require(script.Parent.Gear)
 
 local Renderer = {}
 
-local FLAG_CROWN, FLAG_PROTECTED, FLAG_DASH, FLAG_FIGHT, FLAG_HIDDEN, FLAG_SLOW, FLAG_POISON = 1, 2, 4, 8, 16, 32, 64
+local FLAG_CROWN, FLAG_PROTECTED, FLAG_DASH, FLAG_FIGHT, FLAG_HIDDEN, FLAG_SLOW, FLAG_POISON, FLAG_HURT = 1, 2, 4, 8, 16, 32, 64, 128
 
 local germFolder = Instance.new("Folder")
 germFolder.Name = "Germs"
@@ -81,7 +81,9 @@ local function addFood(id, x, z, value, golden)
 	if not p then
 		p = newPart(Enum.PartType.Ball, nil, Enum.Material.Neon, 0, foodFolder)
 	end
-	local d = math.min(3.2, 1.1 + math.sqrt(value) * 0.3)
+	-- food is worth more in the inner zones (1.2, 2.4, 4.5, 8), so it is drawn clearly bigger there:
+	-- about 1.8, 2.2, 2.6 and 3.1 studs across
+	local d = math.min(4.2, 1 + math.sqrt(value) * 0.75)
 	local y = d / 2
 	p.Material = Enum.Material.SmoothPlastic
 	if golden == 1 then
@@ -472,6 +474,19 @@ local function buildVisual(cellId)
 		v.look = Looks.build(root, { skin = lookSkin, color = color, flag = flag })
 		v.gear = Gear.build(root, info.muts or {}, color, info.core)
 		v.gearState = {}
+		-- a red flash over everything when the germ loses size (see FLAG_HURT)
+		local hurt = Instance.new("Frame")
+		hurt.Name = "Hurt"
+		hurt.Size = UDim2.fromScale(1, 1)
+		hurt.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
+		hurt.BackgroundTransparency = 1
+		hurt.BorderSizePixel = 0
+		hurt.ZIndex = 9
+		hurt.Parent = root
+		local hc = Instance.new("UICorner")
+		hc.CornerRadius = UDim.new(0.5, 0)
+		hc.Parent = hurt
+		v.hurtFrame = hurt
 		v.lookGui = lookGui
 		v.blinkAt = os.clock() + 1 + math.random() * 4
 	end
@@ -530,6 +545,12 @@ local PLATE_TURN = CFrame.Angles(0, math.rad(-90), 0)
 local function place(v, partsOut, cframesOut, t)
 	local r = v.r
 	local x, z = v.x, v.z
+	if (v.hurt or 0) > 0 then
+		-- taking damage: a quick shudder
+		local a = v.hurt * r * 0.07
+		x += math.sin(t * 61) * a
+		z += math.cos(t * 47) * a
+	end
 	local fx, fz = v.dirX, v.dirZ
 	local rx, rz = -fz, fx -- right-hand side when looking along the movement direction
 	local look = CFrame.lookAt(Vector3.zero, Vector3.new(fx, 0, fz))
@@ -782,6 +803,26 @@ function Renderer.update(dt, t)
 						dropSlime(v, now, v.gear.slimeColor)
 					end
 				end
+			end
+			-- damage: red flash and shudder while it lasts, fading out after
+			if bit(flags, FLAG_HURT) then
+				v.hurt = 1
+			elseif (v.hurt or 0) > 0 then
+				v.hurt = math.max(0, v.hurt - dt * 3)
+			end
+			local hurt = v.hurt or 0
+			if v.hurtFrame then
+				local want = hurt > 0 and 1 - hurt * (0.35 + 0.2 * math.sin(t * 20)) or 1
+				if math.abs(v.hurtFrame.BackgroundTransparency - want) > 0.01 then
+					v.hurtFrame.BackgroundTransparency = want
+				end
+			end
+			if hurt > 0 and not v.lookGui then
+				v.body.Color = v.info.color:Lerp(Color3.fromRGB(255, 40, 40), hurt * 0.6)
+				v.hurtTint = true
+			elseif v.hurtTint then
+				v.hurtTint = false
+				v.body.Color = v.info.color
 			end
 			if bit(flags, FLAG_POISON) then
 				v.body.Color = v.info.color:Lerp(Color3.fromRGB(120, 255, 60), 0.4 + math.sin(t * 6) * 0.2)

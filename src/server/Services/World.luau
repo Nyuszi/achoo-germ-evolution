@@ -184,6 +184,11 @@ World.fireDish = fireDish
 local function addFood(dish, x, z, value, zone, golden, big)
 	local id = newId()
 	local pellet = { id = id, x = x, z = z, v = value, zone = (not big) and zone or nil, golden = golden }
+	for _, b in dish.bushes do
+		if (b.x - x) ^ 2 + (b.z - z) ^ 2 < b.r * b.r then
+			pellet.bushR = b.r -- inside a thorn bush: only germs that fit in it can get it
+		end
+	end
 	if big then
 		pellet.need = value * Config.BigFood.NeedMult
 		pellet.crumbZone = zone
@@ -292,6 +297,7 @@ function World.nearestFood(dish, x, z, reach, size)
 	local cx, cz = cellOf(x), cellOf(z)
 	local n = math.max(1, math.ceil((reach or G) / G))
 	local best, bestD = nil, math.huge
+	local tooBigFor = size and Formulas.radius(size, dish.scale) / Config.Hideouts.FitShare or math.huge
 	for gx = cx - n, cx + n do
 		for gz = cz - n, cz + n do
 			local bucket = dish.foodGrid[gridKey(gx, gz)]
@@ -300,7 +306,7 @@ function World.nearestFood(dish, x, z, reach, size)
 					local dx, dz = pellet.x - x, pellet.z - z
 					local d = dx * dx + dz * dz
 					local fromCentre = pellet.x * pellet.x + pellet.z * pellet.z
-					if fromCentre < minDist * minDist or fromCentre > maxDist * maxDist or (pellet.need and size and size < pellet.need) then
+					if fromCentre < minDist * minDist or fromCentre > maxDist * maxDist or (pellet.need and size and size < pellet.need) or (pellet.bushR and pellet.bushR <= tooBigFor) then
 						d = math.huge
 					elseif pellet.golden then
 						d *= 0.1
@@ -407,6 +413,42 @@ function World.germSize(germ)
 end
 
 -- The middle of all of a germ's cells, weighted by size (local coordinates).
+-- Bots: if the way to the target runs into a thorn bush this germ doesn't fit in, aim beside the
+-- bush instead (players who push into one get scratched; bots would just keep pushing)
+function World.avoidBushes(germ)
+	local t = germ.target
+	local dish = germ.dish
+	if not t or not dish or #dish.bushes == 0 then
+		return
+	end
+	local cx, cz = World.germCentre(germ)
+	local r = 0
+	for _, cell in germ.cells do
+		r = math.max(r, cell.r)
+	end
+	local sx, sz = t.x - cx, t.z - cz
+	local len2 = sx * sx + sz * sz
+	if len2 < 0.01 then
+		return
+	end
+	for _, b in dish.bushes do
+		if r >= b.r * Config.Hideouts.FitShare then
+			local reach = b.r + r * 0.5 + 4
+			local u = math.clamp(((b.x - cx) * sx + (b.z - cz) * sz) / len2, 0, 1)
+			local dx, dz = cx + sx * u - b.x, cz + sz * u - b.z
+			local d = math.sqrt(dx * dx + dz * dz)
+			if d < reach then
+				if d < 0.01 then
+					dx, dz, d = -sz, sx, math.sqrt(len2)
+				end
+				local go = reach + r * 0.5 + 6
+				germ.target = { x = b.x + dx / d * go, z = b.z + dz / d * go }
+				return
+			end
+		end
+	end
+end
+
 function World.germCentre(germ)
 	local sx, sz, total = 0, 0, 0
 	for _, cell in germ.cells do
@@ -827,6 +869,13 @@ local function fight(a, b, dt)
 	local toA = Formulas.fightDamage(sb, { size = a.size, armor = defenceArmor(a.germ) }, dt)
 	a.size += toB * Config.FightStealShare - toA
 	b.size += toA * Config.FightStealShare - toB
+	-- whoever is losing size flashes red (see FLAG_HURT)
+	if toA > toB * Config.FightStealShare then
+		a.hurt = true
+	end
+	if toB > toA * Config.FightStealShare then
+		b.hurt = true
+	end
 	a.fighting, b.fighting = true, true
 	poison(b.germ, a.germ)
 	poison(a.germ, b.germ)
@@ -869,10 +918,14 @@ local function bossContact(bossCell, otherCell, dt)
 	if not World.isProtected(other) then
 		local drain = otherCell.size * npc.drain * (1 - math.max(0, defenceArmor(other))) * dt
 		otherCell.size -= drain
+		otherCell.hurt = true
 	end
 	local s = attackStats(other, boss)
 	local dmg = Formulas.bossDamage(otherCell.size, s.bite, dt) + otherCell.size * s.thorns * dt
 	npc.hp -= dmg
+	if dmg > 0 then
+		bossCell.hurt = true
+	end
 	npc.damageBy[other] = (npc.damageBy[other] or 0) + dmg
 	bossCell.fighting, otherCell.fighting = true, true
 	World.hooks.bossHit(boss, other, dmg)
@@ -1081,7 +1134,7 @@ end
 
 -- Snapshot ------------------------------------------------------------------------------------------
 
-local FLAG_CROWN, FLAG_PROTECTED, FLAG_DASH, FLAG_FIGHT, FLAG_HIDDEN, FLAG_SLOW, FLAG_POISON = 1, 2, 4, 8, 16, 32, 64
+local FLAG_CROWN, FLAG_PROTECTED, FLAG_DASH, FLAG_FIGHT, FLAG_HIDDEN, FLAG_SLOW, FLAG_POISON, FLAG_HURT = 1, 2, 4, 8, 16, 32, 64, 128
 
 local function sendSnapshot(dish)
 	if next(dish.viewers) == nil then
@@ -1122,6 +1175,11 @@ local function sendSnapshot(dish)
 		end
 		if has(germ, "Poison") then
 			flags += FLAG_POISON
+		end
+		if cell.hurt then
+			-- set by anything that took size away since the last snapshot
+			flags += FLAG_HURT
+			cell.hurt = nil
 		end
 		buffer.writeu32(buf, offset, id)
 		buffer.writef32(buf, offset + 4, cell.x + dish.cx)
@@ -1248,6 +1306,7 @@ local function stepDish(dish, dt)
 						cell.x, cell.z = b.x + dx / d * reach, b.z + dz / d * reach
 						if not germ.npc then
 							cell.size -= cell.size * Config.Hideouts.Damage * dt
+							cell.hurt = true
 							cell.r = Formulas.radius(cell.size, dish.scale)
 						end
 					end
@@ -1264,15 +1323,18 @@ local function stepDish(dish, dt)
 				-- poison, burning outer ring, Arena spikes
 				if has(germ, "Poison") then
 					cell.size -= cell.size * (germ.poisonRate or 0) * dt
+					cell.hurt = true
 				end
 				local dist = math.sqrt(cell.x * cell.x + cell.z * cell.z)
 				if dish.effects.burnFrom and dist > dish.effects.burnFrom and not World.isProtected(germ) then
 					cell.size -= cell.size * dish.effects.burnRate * dt
+					cell.hurt = true
 				end
 				for _, spike in dish.spikes do
 					local dx, dz = cell.x - spike.x, cell.z - spike.z
 					if dx * dx + dz * dz < (spike.r + cell.r) ^ 2 then
 						cell.size -= cell.size * 0.05 * dt
+						cell.hurt = true
 					end
 				end
 				-- ink clouds hide germs; camo hides still germs

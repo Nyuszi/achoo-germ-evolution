@@ -223,7 +223,7 @@ buffer.writef32(buf, 0, 1) buffer.writeu32(buf, 4, 7)
 local o = 8
 for cidKey in pairs(cells) do
   local cid = tonumber(cidKey)
-  buffer.writeu32(buf, o, cid) buffer.writef32(buf, o + 4, 2400 + cid % 50) buffer.writef32(buf, o + 8, 3) buffer.writef32(buf, o + 12, 50) buffer.writeu8(buf, o + 16, 127)
+  buffer.writeu32(buf, o, cid) buffer.writef32(buf, o + 4, 2400 + cid % 50) buffer.writef32(buf, o + 8, 3) buffer.writef32(buf, o + 12, 50) buffer.writeu8(buf, o + 16, 255)
   o = o + 17
 end
 Renderer.snapshot(buf)

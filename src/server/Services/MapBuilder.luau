@@ -65,6 +65,13 @@ local function ring(parent, cx, cz, radius, segments, height, thickness, color, 
 	return model
 end
 
+-- The dish's edge, flat: a wide band under the floor's edge plus a low lip on the edge itself
+local function flatWall(parent, cx, cz, radius, color, material)
+	disc(parent, cx, cz, radius + 70, -0.1, color, "WallBand", material)
+	disc(parent, cx, cz, radius + 72, -0.2, color:Lerp(Color3.new(0, 0, 0), 0.35), "WallEdge")
+	ring(parent, cx, cz, radius + 1.5, 90, 1.6, 3, color:Lerp(Color3.new(1, 1, 1), 0.25), Enum.Material.SmoothPlastic, 0)
+end
+
 -- Text written on the floor, readable from the top-down camera
 local function floorLabel(parent, text, x, z, width, color)
 	local p = part(parent, {
@@ -140,10 +147,25 @@ local function buildHost(folder, dish)
 	for i = 2, #zones do
 		ring(folder, cx, cz, zones[i].Outer, 72, 1.2, 2.5, rgb(host.Membranes[i]), Enum.Material.Neon, 0.25)
 	end
-	-- the wall: few big blocks rather than many small ones, because Roblox stops drawing small
-	-- parts first when the camera is far away (zoomed out, or on low graphics quality)
-	ring(folder, cx, cz, dish.layout.radius + 8, 40, 24, 16, rgb(host.Wall), Enum.Material.SmoothPlastic, 0)
-	disc(folder, cx, cz, dish.layout.radius + 400, -0.5, rgb(host.Outside), "Outside")
+	-- the wall: a flat fleshy band that starts under the floor's edge (so no background shows
+	-- between floor and wall), a low lip on the edge, and darker lumps. Tall walls looked like
+	-- slanted 3D blocks from the top-down camera.
+	local radius = dish.layout.radius
+	local wall = rgb(host.Wall)
+	flatWall(folder, cx, cz, radius, wall, Enum.Material.SmoothPlastic)
+	for i = 1, 36 do
+		local a = (i + math.random() * 0.6) / 36 * math.pi * 2
+		local d = radius + 22 + math.random() * 34
+		local r = 10 + math.random() * 14
+		part(folder, {
+			Name = "WallLump",
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.1, r * 2, r * 2),
+			CFrame = CFrame.new(cx + math.cos(a) * d, -0.06, cz + math.sin(a) * d) * CFrame.Angles(0, 0, math.rad(90)),
+			Color = wall:Lerp(Color3.new(0, 0, 0), 0.12 + math.random() * 0.1),
+		})
+	end
+	disc(folder, cx, cz, radius + 400, -0.5, rgb(host.Outside), "Outside")
 	for i, info in zones do
 		local inner = zones[i + 1] and zones[i + 1].Outer or 0
 		local mid = (info.Outer + inner) / 2
@@ -190,7 +212,7 @@ local function buildArena(folder, dish)
 			part(folder, { Name = "Grid", Size = Vector3.new(half * 2, 0.05, 0.4), CFrame = CFrame.new(cx, 0.05, cz + x), Color = Color3.fromRGB(160, 200, 220) })
 		end
 	end
-	ring(folder, cx, cz, r + 8, 40, 20, 16, Color3.fromRGB(200, 240, 255), Enum.Material.Glass, 0.3)
+	flatWall(folder, cx, cz, r, Color3.fromRGB(150, 205, 230), Enum.Material.SmoothPlastic)
 	local pore = part(folder, {
 		Name = "ExitPore",
 		Shape = Enum.PartType.Ball,
