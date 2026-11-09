@@ -309,6 +309,30 @@ while SIMTIME < total do
   end
 end
 for _, line in ipairs(sneezes) do print(line) end
+-- Would Roblox save this? DataStores take string-keyed tables or arrays without holes, and no NaN/inf.
+do
+  local bad = {}
+  local function check(v, path)
+    if type(v) == "number" then
+      if v ~= v or v == math.huge or v == -math.huge then table.insert(bad, path .. " is " .. tostring(v)) end
+    elseif type(v) == "table" then
+      local n, strings, numbers = 0, 0, 0
+      for k in pairs(v) do
+        n = n + 1
+        if type(k) == "string" then strings = strings + 1 elseif type(k) == "number" then numbers = numbers + 1 else table.insert(bad, path .. " has a " .. type(k) .. " key") end
+      end
+      if strings > 0 and numbers > 0 then table.insert(bad, path .. " mixes string and number keys") end
+      if numbers > 0 then
+        for i = 1, numbers do if v[i] == nil then table.insert(bad, path .. " is an array with a hole at " .. i) break end end
+      end
+      for k, x in pairs(v) do check(x, path .. "." .. tostring(k)) end
+    elseif type(v) ~= "string" and type(v) ~= "boolean" then
+      table.insert(bad, path .. " is a " .. type(v))
+    end
+  end
+  check(DataService.get(p), "data")
+  if #bad == 0 then print("SAVE CHECK ok") else for _, b in ipairs(bad) do print("SAVE CHECK FAIL " .. b) end end
+end
 print("--- log (last 40) ---")
 for i = math.max(1, #log - 40), #log do print(log[i]) end
 `;

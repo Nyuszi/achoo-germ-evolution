@@ -125,6 +125,9 @@ function DataService.load(player)
 			player:SetAttribute("SaveDisabled", true)
 		end
 	end
+	if not player.Parent then
+		return nil -- left while loading: keep nothing (the leave handler has already run)
+	end
 	profiles[player] = reconcile(type(data) == "table" and data or {})
 	if loaded[player] then
 		loaded[player]:Fire()

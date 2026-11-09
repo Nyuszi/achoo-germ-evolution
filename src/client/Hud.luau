@@ -142,9 +142,9 @@ make("UITextSizeConstraint", { MaxTextSize = 140, Parent = deathCount })
 local deathSub = text({ Size = UDim2.new(0.8, 0, 0, 28), Position = UDim2.new(0.1, 0, 0.16, 262), Text = "", ZIndex = 21, Parent = death })
 local reviveButton = button({ Size = UDim2.new(0, 340, 0, 70), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.16, 304), Text = "💖 REVIVE at full size  ·  25 R$", BackgroundColor3 = Color3.fromRGB(255, 200, 60), ZIndex = 21, ClipsDescendants = true, Parent = death }, function()
 	local ok, message = Remotes.Shop:InvokeServer("BuyProduct", "Revive")
-	if ok then
-		death.Visible = false
-	elseif message then
+	-- (the screen goes away when the server says we are alive again: see Hud.sync. "ok" only
+	-- means the purchase prompt opened, and the player may still cancel it.)
+	if not ok and message then
 		Hud.notify(message, "error")
 	end
 end)
@@ -603,6 +603,9 @@ function Hud.sync(newState)
 		arenaLabel.Visible = false
 	end
 	reviveButton.Visible = reviveButton.Visible and state.canRevive
+	if state.alive and death.Visible then
+		death.Visible = false -- revived (or respawned) early
+	end
 	for slot, b in { Front = frontButton, Special = specialButton } do
 		local a = state.actives[slot]
 		b.Visible = a ~= nil

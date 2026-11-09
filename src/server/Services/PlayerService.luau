@@ -391,7 +391,7 @@ end
 local function onJoin(player)
 	leaderstats(player)
 	local data = DataService.load(player)
-	if not player.Parent then
+	if not data or not player.Parent then
 		return
 	end
 	local played = data.TotalPlaySeconds or 0
@@ -634,6 +634,7 @@ local function onGermDied(victim, eater)
 	local start = PlayerService.startSize(player, data.Host)
 	local size = Formulas.respawnSize(victim.sizeAtDeath or 0, victim.stats.respawnShare, start)
 	victim.reviveSize = victim.sizeAtDeath
+	victim.reviveDish = dish
 	victim.reviveUntil = World.now() + 20
 	Net.Died:FireClient(player, eater and eater.name or "?", Config.RespawnSeconds, true)
 	task.delay(Config.RespawnSeconds, function()
@@ -659,12 +660,17 @@ function PlayerService.revive(player)
 	if germ.alive then
 		World.setGermSize(germ, math.max(size, World.germSize(germ)))
 	else
-		task.delay(Config.RespawnSeconds + 0.2, function()
-			if germ.alive then
-				World.setGermSize(germ, math.max(size, World.germSize(germ)))
-			end
-		end)
+		-- still on the death screen: come back right now at full size (the respawn timer then
+		-- finds the germ alive and does nothing)
+		local dish = germ.reviveDish
+		if dish and World.dish(dish.id) then
+			DishService.enter(germ, dish, size)
+		else
+			PlayerService.goHost(player, size)
+		end
+		PlayerService.sync(player)
 	end
+	germ.reviveDish = nil
 	return true
 end
 

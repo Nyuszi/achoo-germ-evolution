@@ -109,6 +109,13 @@ function actions.Enter(player, data)
 	if not ArenaService.unlocked(player) then
 		return false, "Finish all 6 hosts (Mutant I) to unlock The Infinite Petri"
 	end
+	local germ = PlayerService.germ(player)
+	if not germ or germ.sneezing then
+		return false, "Wait for the sneeze to finish"
+	end
+	if germ.mode == "arena" then
+		return false, "You're already in the Arena"
+	end
 	seasonCheck(data)
 	ArenaService.toFloor(player, math.max(1, data.ArenaFloor))
 	return true, "Welcome to The Infinite Petri! Reach size " .. A.GoalSize .. " and touch the Exit Pore"
