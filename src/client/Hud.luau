@@ -133,27 +133,68 @@ end
 -- Death screen ----------------------------------------------------------------------------------
 
 local death = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.45, Visible = false, ZIndex = 20, Parent = gui })
-local deathText = text({ Size = UDim2.new(0.8, 0, 0, 60), Position = UDim2.new(0.1, 0, 0.36, 0), Text = "", ZIndex = 21, Parent = death })
-local deathSub = text({ Size = UDim2.new(0.8, 0, 0, 30), Position = UDim2.new(0.1, 0, 0.36, 66), Text = "", ZIndex = 21, Parent = death })
-local reviveButton = button({ Size = UDim2.new(0, 260, 0, 50), Position = UDim2.new(0.5, -130, 0.36, 110), Text = "💖 Revive at full size (25 R$)", BackgroundColor3 = Ui.GOOD, ZIndex = 21, Parent = death }, function()
+local deathText = text({ Size = UDim2.new(0.8, 0, 0, 56), Position = UDim2.new(0.1, 0, 0.16, 0), Text = "", ZIndex = 21, Parent = death })
+local deathCountLabel = text({ Size = UDim2.new(0.6, 0, 0, 30), Position = UDim2.new(0.2, 0, 0.16, 62), Text = "Back in", ZIndex = 21, TextColor3 = Color3.fromRGB(215, 205, 230), Parent = death })
+-- the big countdown: each second pops in large and settles
+local deathCount = text({ Size = UDim2.new(0, 200, 0, 150), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.16, 180), Text = "3", ZIndex = 22, TextColor3 = Color3.fromRGB(255, 220, 90), Parent = death })
+local countScale = make("UIScale", { Parent = deathCount })
+make("UITextSizeConstraint", { MaxTextSize = 140, Parent = deathCount })
+local deathSub = text({ Size = UDim2.new(0.8, 0, 0, 28), Position = UDim2.new(0.1, 0, 0.16, 262), Text = "", ZIndex = 21, Parent = death })
+local reviveButton = button({ Size = UDim2.new(0, 340, 0, 70), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.16, 304), Text = "💖 REVIVE at full size  ·  25 R$", BackgroundColor3 = Color3.fromRGB(255, 200, 60), ZIndex = 21, ClipsDescendants = true, Parent = death }, function()
 	local ok, message = Remotes.Shop:InvokeServer("BuyProduct", "Revive")
-	if not ok and message then
+	if ok then
+		death.Visible = false
+	elseif message then
 		Hud.notify(message, "error")
 	end
 end)
+make("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(255, 240, 150), Color3.fromRGB(255, 150, 40)), Rotation = 90, Parent = reviveButton })
+local reviveScale = make("UIScale", { Parent = reviveButton })
+-- a shine that sweeps across the button
+local reviveShine = make("Frame", { Size = UDim2.new(0, 40, 2, 0), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(-0.2, 0.5), Rotation = 20, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.45, BorderSizePixel = 0, ZIndex = 22, Parent = reviveButton })
+local deathEnds, deathShown = 0, 0
 
 function Hud.died(eaterName, seconds, canRevive, backToFloor)
 	death.Visible = true
 	deathText.Text = "You were eaten by " .. eaterName .. "!"
 	if backToFloor then
-		deathSub.Text = "Back to Floor " .. backToFloor .. " (your checkpoint)..."
+		deathSub.Text = "Back to Floor " .. backToFloor .. " (your checkpoint)"
 	else
-		deathSub.Text = "Coming back with part of your size... (Revenge: eat them within 60 s for 2x DNA)"
+		deathSub.Text = "You come back with part of your size. Revenge: eat them within 60 s for 2x DNA!"
 	end
 	reviveButton.Visible = canRevive == true
+	deathShown = os.clock()
+	deathEnds = deathShown + seconds
+	deathCount.Text = tostring(math.ceil(seconds))
 	task.delay(seconds, function()
-		death.Visible = false
+		if os.clock() >= deathEnds - 0.05 then
+			death.Visible = false
+		end
 	end)
+end
+
+-- every frame while the death screen shows: count down, pulse the revive button
+local function animateDeath()
+	if not death.Visible then
+		return
+	end
+	local now = os.clock()
+	local left = math.max(0, deathEnds - now)
+	local whole = math.ceil(left)
+	local text = whole > 0 and tostring(whole) or "GO!"
+	if deathCount.Text ~= text then
+		deathCount.Text = text
+	end
+	-- each new second starts big and shrinks back
+	local within = 1 - (left - math.floor(left))
+	countScale.Scale = 1 + 0.6 * math.max(0, 1 - within * 4)
+	deathCount.TextColor3 = whole <= 1 and Color3.fromRGB(140, 255, 160) or Color3.fromRGB(255, 220, 90)
+	if reviveButton.Visible then
+		local t = now - deathShown
+		reviveScale.Scale = 1 + 0.06 * math.sin(t * 6)
+		reviveButton.Rotation = math.sin(t * 3) * 2
+		reviveShine.Position = UDim2.fromScale(-0.2 + ((t * 0.8) % 1) * 1.6, 0.5)
+	end
 end
 
 -- Sneeze cutscene ---------------------------------------------------------------------------------
@@ -574,6 +615,7 @@ Hud.onSync = function(s) end
 
 -- Called every frame with the local cooldowns counting down
 function Hud.tick(dt)
+	animateDeath()
 	if state then
 		state.dashIn = math.max(0, (state.dashIn or 0) - dt)
 		state.splitIn = math.max(0, (state.splitIn or 0) - dt)

@@ -117,7 +117,7 @@ local function eaterNear(x, z)
 		if v.x and v.info.npc ~= "antibody" then
 			local dx, dz = v.x - x, v.z - z
 			local d = math.sqrt(dx * dx + dz * dz) - v.r
-			if d < bestD and d < 16 then -- magnets and suction pull food from a way off
+			if d < bestD and d < 45 then -- magnets, vacuums and gravity wells pull food from far off
 				best, bestD = id, d
 			end
 		end
@@ -185,6 +185,112 @@ local TRAIL_COLORS = {
 	ArenaLightning = { Color3.fromRGB(255, 255, 120), Color3.fromRGB(160, 120, 255) },
 }
 
+-- Trail skins also leave little things behind them, so each looks like its name: drawn on small
+-- billboards (pooled) that float off and fade. A text entry is an emoji; a table is a glossy dot.
+local TRAIL_BITS = {
+	Bubbles = { { 200, 235, 255 }, { 170, 220, 255 } },
+	Sparkles = { "✨", "⭐" },
+	SlimeTrail = { { 120, 230, 90 }, { 90, 200, 60 } },
+	Hearts = { "💖", "❤️", "💕" },
+	Fire = { "🔥" },
+	ArenaFlame = { "🔥", { 120, 255, 220 } },
+	ArenaLightning = { "⚡" },
+}
+local BIT_LIFE = 1.1
+local bits = {} -- { gui, label, dot, t, x, y, z, size, drift }
+local freeBits = {}
+local bitAnchor = newPart(Enum.PartType.Block, nil, nil, 1)
+bitAnchor.Size = Vector3.one * 0.1
+bitAnchor.Name = "TrailAnchor"
+bitAnchor.CFrame = CFrame.new(0, 0, 0)
+bitAnchor.Parent = germFolder
+
+local function newBit()
+	local gui = Instance.new("BillboardGui")
+	gui.LightInfluence = 0
+	gui.AlwaysOnTop = false
+	gui.Adornee = bitAnchor
+	gui.Parent = bitAnchor
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.Parent = gui
+	local dot = Instance.new("Frame")
+	dot.AnchorPoint = Vector2.new(0.5, 0.5)
+	dot.Position = UDim2.fromScale(0.5, 0.5)
+	dot.Size = UDim2.fromScale(0.7, 0.7)
+	dot.BorderSizePixel = 0
+	dot.Parent = gui
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0.5, 0)
+	c.Parent = dot
+	local shine = Instance.new("Frame")
+	shine.Position = UDim2.fromScale(0.2, 0.15)
+	shine.Size = UDim2.fromScale(0.3, 0.3)
+	shine.BackgroundColor3 = Color3.new(1, 1, 1)
+	shine.BorderSizePixel = 0
+	shine.Parent = dot
+	local c2 = Instance.new("UICorner")
+	c2.CornerRadius = UDim.new(0.5, 0)
+	c2.Parent = shine
+	return { gui = gui, label = label, dot = dot, shine = shine }
+end
+
+local function dropBit(v, now)
+	local list = TRAIL_BITS[v.trailKind]
+	if not list or now < (v.bitAt or 0) then
+		return
+	end
+	local dx, dz = v.x - (v.bitX or 1e9), v.z - (v.bitZ or 1e9)
+	if dx * dx + dz * dz < (v.r * 0.3) ^ 2 then
+		return -- standing still
+	end
+	v.bitAt, v.bitX, v.bitZ = now + 0.08, v.x, v.z
+	v.bitN = (v.bitN or 0) + 1
+	local what = list[v.bitN % #list + 1]
+	local b = table.remove(freeBits) or newBit()
+	local side = (math.random() - 0.5) * 1.4
+	b.x = v.x - v.dirX * v.r * 0.95 - v.dirZ * v.r * side
+	b.z = v.z - v.dirZ * v.r * 0.95 + v.dirX * v.r * side
+	b.y = v.r * (0.6 + math.random() * 0.6)
+	b.size = v.r * (0.45 + math.random() * 0.25)
+	b.drift = (math.random() - 0.5) * 2
+	b.t = 0
+	if type(what) == "string" then
+		b.label.Text = what
+		b.label.Visible = true
+		b.dot.Visible = false
+	else
+		b.label.Visible = false
+		b.dot.Visible = true
+		b.dot.BackgroundColor3 = Color3.fromRGB(what[1], what[2], what[3])
+	end
+	b.gui.Enabled = true
+	table.insert(bits, b)
+end
+
+local function updateBits(dt)
+	for i = #bits, 1, -1 do
+		local b = bits[i]
+		b.t += dt
+		local p = b.t / BIT_LIFE
+		if p >= 1 then
+			b.gui.Enabled = false
+			table.insert(freeBits, b)
+			table.remove(bits, i)
+		else
+			local s = b.size * (0.6 + 0.6 * math.min(1, p * 3)) * (1 - p * 0.3)
+			b.gui.Size = UDim2.fromScale(s, s)
+			b.gui.StudsOffsetWorldSpace = Vector3.new(b.x + b.drift * p * b.size, b.y + p * b.size * 0.8, b.z)
+			local fade = math.max(0, (p - 0.45) / 0.55)
+			b.label.TextTransparency = fade
+			b.dot.BackgroundTransparency = 0.25 + 0.75 * fade
+			b.shine.BackgroundTransparency = 0.4 + 0.6 * fade
+		end
+	end
+end
+
 -- Builds one cell's parts. Each extra part has a place function(v, at, put, look) called every frame.
 local function buildVisual(cellId)
 	local germId = Renderer.cellGerm[cellId]
@@ -251,7 +357,7 @@ local function buildVisual(cellId)
 		local t = Instance.new("Trail")
 		t.Attachment0, t.Attachment1 = a0, a1
 		t.Color = ColorSequence.new(TRAIL_COLORS[trail][1], TRAIL_COLORS[trail][2])
-		t.Transparency = NumberSequence.new(0.05, 1)
+		t.Transparency = NumberSequence.new(0.3, 1) -- softer: the trail bits are the show
 		t.WidthScale = NumberSequence.new(1, 0.25)
 		t.Lifetime = 0.7
 		t.MinLength = 0
@@ -261,6 +367,7 @@ local function buildVisual(cellId)
 		t.FaceCamera = false
 		t.Parent = v.body
 		v.trail = { a0 = a0, a1 = a1, t = t }
+		v.trailKind = trail
 	end
 
 	-- name tag (and flag)
@@ -311,25 +418,30 @@ local function buildVisual(cellId)
 			local c = Instance.new("UICorner")
 			c.CornerRadius = UDim.new(0.5, 0)
 			c.Parent = round
-			-- Roblox stops growing scaled text at 100 px, so a big germ only got a small flag.
-			-- The emoji is drawn in a fixed 100 px box instead and a UIScale blows it up to
-			-- 2.1x the disc every frame (see FLAG_BOX in Renderer.update).
+			-- Roblox caps text at 100 px, so a big germ only got a small flag. The emoji is drawn
+			-- at a fixed 100 px (TextScaled would also stop at 100) and a UIScale blows it up to
+			-- 2.1x the disc's real size on screen every frame (see FLAG_BOX in Renderer.update).
 			local f = Instance.new("TextLabel")
 			f.AnchorPoint = Vector2.new(0.5, 0.5)
 			f.Position = UDim2.fromScale(0.5, 0.5)
 			f.Size = UDim2.fromOffset(FLAG_BOX, FLAG_BOX)
 			f.BackgroundTransparency = 1
-			f.TextScaled = true
+			f.TextScaled = false
+			f.TextSize = FLAG_BOX
 			f.Text = Flags.emoji(skin.Flag)
 			f.Parent = round
 			local grow = Instance.new("UIScale")
 			grow.Scale = 1
 			grow.Parent = f
+			v.flagRound = round
 			v.flagScale = grow
 		end
 		local lookSkin = skin
 		if npc then
 			lookSkin = { Eyes = "Angry", Mouth = "Fangs" }
+		elseif Gear.mouthless(info.muts) then
+			lookSkin = table.clone(skin)
+			lookSkin.Mouth = "None"
 		end
 		v.look = Looks.build(root, { skin = lookSkin, color = color, flag = flag })
 		v.gear = Gear.build(root, info.muts or {}, color, info.core)
@@ -359,6 +471,27 @@ local function dropSlime(v, now, color)
 	table.insert(puddles, { part = p, t = 0 })
 end
 
+-- The look billboard must lie just above the top of the body (or the ball hides it), but the
+-- camera looks at it in perspective: straight up, a germ far from the middle of the screen gets
+-- its face shifted outwards. So it is slid along the line from the body's centre to the camera
+-- (it still covers exactly the centre) and shrunk by how much nearer it got.
+local function alignLook(v, cam)
+	local r = v.drawnR
+	local k = 0
+	if cam then
+		local dy = cam.Y - r
+		k = math.clamp(r * 1.03 / math.max(dy, r * 1.5), 0, 0.7)
+		v.lookGui.StudsOffsetWorldSpace = Vector3.new((cam.X - v.x) * k, dy * k, (cam.Z - v.z) * k)
+	else
+		v.lookGui.StudsOffsetWorldSpace = Vector3.new(0, r * 1.03, 0)
+	end
+	local size = r * 2 * LOOK_PAD * (1 - k)
+	if math.abs(size - (v.lookSize or 0)) > size * 0.004 then
+		v.lookSize = size
+		v.lookGui.Size = UDim2.fromScale(size, size)
+	end
+end
+
 -- Sizes every part for radius r (only when the radius really changed)
 local function resize(v, r)
 	v.body.Size = Vector3.one * r * 2
@@ -373,10 +506,6 @@ local function resize(v, r)
 		e.part.Size = s
 	end
 	v.shield.Size = Vector3.one * r * 2.5
-	if v.lookGui then
-		v.lookGui.Size = UDim2.fromScale(r * 2 * LOOK_PAD, r * 2 * LOOK_PAD)
-		v.lookGui.StudsOffsetWorldSpace = Vector3.new(0, r * 1.03, 0) -- just above the top of the body
-	end
 	if v.trail then
 		-- just outside the back of the ball, half way up (above any floor bumps)
 		v.trail.a0.Position = Vector3.new(-r * 0.5, 0, r * 0.9)
@@ -429,6 +558,11 @@ local function clearAll()
 		table.insert(freePuddles, pd.part)
 	end
 	puddles = {}
+	for _, b in bits do
+		b.gui.Enabled = false
+		table.insert(freeBits, b)
+	end
+	bits = {}
 	for _, s in sucking do
 		hideFood(s.part)
 	end
@@ -535,6 +669,8 @@ end
 -- Called every frame
 function Renderer.update(dt, t)
 	local parts, cframes = {}, {}
+	local camCf = workspace.CurrentCamera and workspace.CurrentCamera.CFrame
+	local cam = camCf and camCf.Position
 	local k = 1 - math.exp(-14 * dt)
 	for id, s in latest do
 		local v = Renderer.cells[id]
@@ -604,7 +740,7 @@ function Renderer.update(dt, t)
 				end
 				if v.flagScale then
 					-- keep the flag covering the whole body however big it is on screen
-					local px = v.lookGui.AbsoluteSize.X / LOOK_PAD
+					local px = v.flagRound.AbsoluteSize.X
 					local want = math.max(0.01, px * 2.1 / FLAG_BOX)
 					if math.abs(v.flagScale.Scale - want) > want * 0.01 then
 						v.flagScale.Scale = want
@@ -612,6 +748,9 @@ function Renderer.update(dt, t)
 				end
 				if v.look.spin then
 					v.look.spin.Rotation = (t * 720) % 360
+				end
+				if v.trailKind and not hidden then
+					dropBit(v, now)
 				end
 				if v.gear and (not hidden or mine) then
 					-- mutations: face the swim direction and show what they do
@@ -654,6 +793,9 @@ function Renderer.update(dt, t)
 				v.label.Text = text
 			end
 			place(v, parts, cframes, t)
+			if v.lookGui and v.lookGui.Enabled ~= false then
+				alignLook(v, cam)
+			end
 		end
 	end
 	-- swallowed cells fly into the eater and shrink; eaten food gets sucked in
@@ -675,6 +817,9 @@ function Renderer.update(dt, t)
 			v.r = math.max(0.05, d.r * (1 - p))
 			resize(v, v.r)
 			place(v, parts, cframes, t)
+			if v.lookGui then
+				alignLook(v, cam)
+			end
 		end
 	end
 	for i = #sucking, 1, -1 do
@@ -694,6 +839,7 @@ function Renderer.update(dt, t)
 			s.part.CFrame = CFrame.new(s.x + (v.x - s.x) * e, s.y + (v.r - s.y) * e, s.z + (v.z - s.z) * e)
 		end
 	end
+	updateBits(dt)
 	for i = #puddles, 1, -1 do
 		local pd = puddles[i]
 		pd.t += dt

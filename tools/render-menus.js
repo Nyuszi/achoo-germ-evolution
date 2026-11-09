@@ -11,7 +11,7 @@ const out = path.resolve(process.argv[2] || "menu-previews");
 fs.mkdirSync(out, { recursive: true });
 const SHOTS = [
   ["Lab", "Mutations"], ["Lab", "Fusions"], ["Lab", "Runs"], ["Editor", "Body"], ["Editor", "Eyes"], ["Editor", "Hat"], ["Editor", "Flag"], ["Shop"], ["Quests", "Daily"],
-  ["Quests", "Cards"], ["Arena"], ["Leaders", "Speedrun"], ["Feedback"], ["Dev"], ["_hud"],
+  ["Quests", "Cards"], ["Arena"], ["Leaders", "Speedrun"], ["Feedback"], ["Dev"], ["_hud"], ["_death"],
 ];
 const BAR_NAME = { Lab: "Lab", Editor: "Editor", Shop: "Shop", Quests: "Quests", Arena: "Arena", Leaders: "Top", Feedback: "Ideas", Dev: "Dev" };
 const json = path.join(out, "menus.json");
@@ -45,6 +45,7 @@ function render(i) {
     return;
   }
   screen.style.width = "1280px"; screen.style.height = "720px";
+  if (shot.name === "_death") { screen.style.background = "linear-gradient(#ffd9e0,#ffe9b0)"; draw(shot.tree, screen, 1280, 720); return; }
   const bar = draw(DATA.bar, screen, 1280, 720);
   bar.style.overflow = "visible"; // the game doesn't clip the bar; only this drawing did
   for (const b of bar.querySelectorAll(".t")) if (b.textContent.endsWith(" " + shot.bar)) b.parentElement.classList.add("hl");

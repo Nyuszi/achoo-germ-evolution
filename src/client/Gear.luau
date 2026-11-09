@@ -8,15 +8,15 @@
 -- (Flagella, Jet, Slime) at the bottom. Camo blotches and the Sneezer nose do not turn.
 --
 -- Animations (Gear.animate state: dx, dz, fight, dash, power, powerAge):
---   Jaws      a toothy maw that chews slowly, chomps fast in a fight, snaps 3 times on Chomp
---   Suction   a lamprey mouth whose tooth ring turns, a vortex and food motes flowing in
+--   Jaws      steel chompers that open and shut slowly, snap fast in a fight, 3 times on Chomp
+--   Suction   a steel intake with a spinning turbine, a vortex and food motes flowing in
 --             (Vacuum: the vortex grows and spins hard)
 --   Drill     a striped cone that spins (Pierce: glows orange and throws sparks)
 --   Flagella  two whipping tails (faster while dashing)
 --   Jet       two nozzles with flickering flames (long blue-hot flames while dashing)
 --   Slime     dripping goo (the Renderer also leaves puddles on the floor)
 --   Spikes    a ring of thorns that turns (Buzzsaw: spins fast while dashing), red tips in fights
---   Toxin     four throbbing poison sacs leaking bubbles
+--   Toxin     four throbbing poison canisters leaking bubbles
 --   Shell     riveted steel plates that flash when hit
 --   Magnet    a horseshoe magnet with ripples (Gravity well: a ring of dots spiralling in)
 --   Sneezer   a twitchy nose (Blast: shock rings and spray)
@@ -76,6 +76,11 @@ function Gear.has(muts, id)
 	return false
 end
 
+-- A mouth mutation replaces the skin's mouth (no germ with two mouths)
+function Gear.mouthless(muts)
+	return Gear.has(muts, "Jaws") or Gear.has(muts, "Suction")
+end
+
 function Gear.fused(muts, id)
 	for _, m in muts or {} do
 		if string.gsub(m, "^#", "") == id then
@@ -89,50 +94,72 @@ local BUILD = {}
 
 -- Front -------------------------------------------------------------------------------------------
 
-function BUILD.Jaws(g, h, color, o)
-	local maw = sub(g, 0.5, 0.08, 0.8, 0.8, 3, "Jaws")
-	local lip = lerp(color, INK, 0.45)
-	local tooth = o.venom and rgb(200, 255, 120) or WHITE
-	local edge = box(maw, 0.5, 0.5, 0.92, 0.5, INK, { z = 1, t = 0.1 })
-	local lips = box(maw, 0.5, 0.5, 0.86, 0.44, lip, { z = 2, grad = { color = shade(lerp(lip, WHITE, 0.3), lip), rot = 90 } })
-	local hole = box(maw, 0.5, 0.5, 0.74, 0.1, THROAT, { z = 3, grad = { color = shade(rgb(40, 5, 20), rgb(150, 35, 60)), rot = 90 } })
-	local tongue = box(maw, 0.5, 0.56, 0.3, 0.08, PINK, { z = 4, grad = { color = shade(rgb(255, 160, 185), PINK), rot = 90 } })
-	local upper = sub(maw, 0.5, 0.5, 1, 1, 5, "Upper")
-	local lower = sub(maw, 0.5, 0.5, 1, 1, 5, "Lower")
-	for i = 0, 4 do
-		local x = 0.2 + i * 0.15
-		local fang = i == 0 or i == 4
-		tri(upper, x, 0.5, fang and 0.17 or 0.12, 180, tooth, { z = 1 })
-		if i < 4 then
-			tri(lower, x + 0.075, 0.5, 0.11, 0, tooth, { z = 1 })
-		end
+-- Gradient cut: keep one half of a shape (hard step in transparency)
+local function keepHalf(first)
+	local a, b = first and 0 or 1, first and 1 or 0
+	return NumberSequence.new({
+		NumberSequenceKeypoint.new(0, a),
+		NumberSequenceKeypoint.new(0.499, a),
+		NumberSequenceKeypoint.new(0.501, b),
+		NumberSequenceKeypoint.new(1, b),
+	})
+end
+
+-- steel chompers at the front: two riveted half-disc jaws with big teeth that open on a dark
+-- throat and snap shut (like a robot mouth / bear trap)
+local function chomperJaw(parent, up, tooth)
+	local j = sub(parent, 0.5, 0.5, 1, 1, up and 3 or 2, up and "UpperJaw" or "LowerJaw")
+	local cut = { trans = keepHalf(up), rot = 90 }
+	box(j, 0.5, 0.5, 1, 1, INK, { z = 1, grad = cut })
+	box(j, 0.5, 0.5, 0.9, 0.9, STEEL, { z = 2, grad = { trans = keepHalf(up), rot = 90, color = up and shade(WHITE, rgb(140, 145, 165)) or shade(rgb(140, 145, 165), rgb(210, 215, 230)) } })
+	local ry = up and 0.3 or 0.7
+	box(j, 0.5, up and 0.46 or 0.54, 0.86, 0.05, STEEL_DARK, { z = 3, corner = false }) -- the jaw's lip
+	for _, x in { 0.3, 0.7 } do
+		circle(j, x, ry, 0.08, STEEL_DARK, { z = 3 })
+		circle(j, x - 0.01, ry - 0.01, 0.035, WHITE, { z = 4, t = 0.3 })
 	end
-	h.jaws = { maw = maw, edge = edge, lips = lips, hole = hole, tongue = tongue, upper = upper, lower = lower }
+	for i = 0, 5 do
+		local x = 0.17 + i * 0.132
+		tri(j, x, up and 0.49 or 0.51, 0.15, up and 180 or 0, tooth, { z = 5 })
+	end
+	return j
+end
+
+function BUILD.Jaws(g, h, color, o)
+	local trap = sub(g, 0.5, -0.1, 0.64, 0.64, 3, "Jaws")
+	local tooth = o.venom and rgb(170, 255, 90) or WHITE
+	local throat = box(trap, 0.5, 0.5, 0.8, 0.1, THROAT, { z = 1, corner = UDim.new(0.3, 0), grad = { color = shade(rgb(40, 5, 20), rgb(150, 35, 60)), rot = 90 } })
+	local upper = chomperJaw(trap, true, tooth)
+	local lower = chomperJaw(trap, false, tooth)
+	-- hinge bolts on both sides
+	for _, x in { 0.02, 0.98 } do
+		circle(trap, x, 0.5, 0.16, INK, { z = 6 })
+		circle(trap, x, 0.5, 0.12, STEEL_DARK, { z = 7, grad = { color = shade(WHITE, rgb(120, 120, 140)), rot = 90 } })
+		box(trap, x, 0.5, 0.08, 0.025, INK, { z = 8, rot = 45, corner = false })
+	end
+	h.jaws = { trap = trap, upper = upper, lower = lower, throat = throat }
 end
 
 local function animJaws(j, t, st)
-	local open, grow = 0.35 + 0.2 * math.sin(t * 2.5), 1
+	local open, grow = 0.5 + 0.3 * math.sin(t * 2.5), 1
 	if st.power == "Chomp" and st.powerAge < 1 then
-		open = math.abs(math.sin(st.powerAge * math.pi * 3))
-		grow = 1.35
+		open = math.abs(math.cos(st.powerAge * math.pi * 3))
+		grow = 1.3
 	elseif st.fight then
-		open = math.abs(math.sin(t * 12))
-		grow = 1.12
+		open = math.abs(math.cos(t * 10))
+		grow = 1.1
 	end
-	local gap = 0.05 + 0.33 * open
-	j.maw.Size = UDim2.fromScale(0.8 * grow, 0.8 * grow)
-	j.edge.Size = UDim2.fromScale(0.92, gap + 0.3)
-	j.lips.Size = UDim2.fromScale(0.86, gap + 0.24)
-	j.hole.Size = UDim2.fromScale(0.74, gap + 0.02)
-	j.tongue.Position = UDim2.fromScale(0.5, 0.5 + gap * 0.25)
-	j.tongue.Visible = gap > 0.15
+	local gap = 0.02 + 0.48 * open
+	j.trap.Size = UDim2.fromScale(0.64 * grow, 0.64 * grow)
 	j.upper.Position = UDim2.fromScale(0.5, 0.5 - gap / 2)
 	j.lower.Position = UDim2.fromScale(0.5, 0.5 + gap / 2)
+	j.throat.Size = UDim2.fromScale(0.8, gap + 0.04)
 end
 
+-- a steel intake at the front with a spinning turbine; a vortex pulls food motes into it
 function BUILD.Suction(g, h, color, o)
 	local dark = o.blackHole
-	local lip = dark and rgb(80, 40, 120) or lerp(color, PINK, 0.55)
+	local rim = dark and rgb(90, 50, 140) or STEEL
 	local swirl = dark and rgb(170, 110, 255) or rgb(200, 240, 255)
 	local vortex = sub(g, 0.5, -0.14, 0.55, 0.55, 1, "Vortex")
 	for k = 0, 2 do
@@ -145,15 +172,21 @@ function BUILD.Suction(g, h, color, o)
 	end
 	local mouth = sub(g, 0.5, 0.04, 0.5, 0.5, 3, "Suction")
 	circle(mouth, 0.5, 0.5, 1, INK, { z = 1, t = 0.1 })
-	circle(mouth, 0.5, 0.5, 0.9, lip, { z = 2, grad = { color = shade(lerp(lip, WHITE, 0.35), lerp(lip, INK, 0.2)), rot = 90 } })
-	circle(mouth, 0.5, 0.5, 0.66, dark and rgb(15, 5, 25) or THROAT, { z = 3 })
-	local ring = sub(mouth, 0.5, 0.5, 1, 1, 4, "Ring")
-	for i = 1, 9 do
-		local a = i / 9 * math.pi * 2
-		tri(ring, 0.5 + math.cos(a) * 0.3, 0.5 + math.sin(a) * 0.3, 0.13, math.deg(a) - 90, dark and rgb(220, 200, 255) or WHITE, { z = 1 })
+	circle(mouth, 0.5, 0.5, 0.92, rim, { z = 2, grad = { color = shade(WHITE, lerp(rim, INK, 0.3)), rot = 90 } })
+	circle(mouth, 0.5, 0.5, 0.7, dark and rgb(15, 5, 25) or rgb(30, 30, 45), { z = 3 })
+	for i = 1, 6 do
+		local a = i / 6 * math.pi * 2 + 0.26
+		circle(mouth, 0.5 + math.cos(a) * 0.405, 0.5 + math.sin(a) * 0.405, 0.07, STEEL_DARK, { z = 4 })
 	end
-	circle(mouth, 0.5, 0.5, 0.24, rgb(10, 0, 8), { z = 5 })
-	h.suction = { vortex = vortex, ring = ring, motes = motes, mouth = mouth }
+	local fan = sub(mouth, 0.5, 0.5, 1, 1, 5, "Fan")
+	for i = 1, 5 do
+		local a = i / 5 * 360
+		local r = math.rad(a)
+		box(fan, 0.5 + math.cos(r) * 0.16, 0.5 + math.sin(r) * 0.16, 0.3, 0.1, dark and rgb(200, 170, 255) or rgb(215, 220, 235), { z = 1, rot = a + 20, corner = UDim.new(0.5, 0) })
+	end
+	circle(mouth, 0.5, 0.5, 0.16, STEEL_DARK, { z = 6 })
+	circle(mouth, 0.47, 0.47, 0.06, WHITE, { z = 7, t = 0.4 })
+	h.suction = { vortex = vortex, ring = fan, motes = motes, mouth = mouth }
 end
 
 local function animSuction(s, t, st)
@@ -164,8 +197,8 @@ local function animSuction(s, t, st)
 	else
 		s.mouth.Size = UDim2.fromScale(0.5, 0.5)
 	end
-	local speed = pull and 8 or 1
-	s.ring.Rotation = (t * 50 * speed) % 360
+	local speed = pull and 6 or 1
+	s.ring.Rotation = (t * 240 * speed) % 360
 	s.vortex.Rotation = (-t * 90 * speed) % 360
 	local size = pull and 1.3 or 0.55
 	s.vortex.Size = UDim2.fromScale(size, size)
@@ -297,9 +330,11 @@ end
 
 -- Sides -------------------------------------------------------------------------------------------
 
-function BUILD.Spikes(g, h, color)
+function BUILD.Spikes(g, h, color, o)
 	local ring = sub(g, 0.5, 0.5, 1, 1, 1, "Spikes")
-	local dark = lerp(color, INK, 0.5)
+	-- the Spikes mutation is steel; a Star core grows spikes in the body colour
+	local dark = o.starOnly and lerp(color, INK, 0.5) or rgb(120, 125, 145)
+	color = o.starOnly and color or rgb(200, 205, 220)
 	local tips = {}
 	for i = 1, 10 do
 		local a = i / 10 * math.pi * 2
@@ -324,17 +359,20 @@ local function animSpikes(s, t, st, dt)
 	end
 end
 
+-- four glass canisters of glowing poison with steel caps, leaking bubbles
 function BUILD.Toxin(g, h)
 	local sacs = {}
 	local green, deep = rgb(150, 255, 80), rgb(60, 170, 40)
 	for k = 1, 4 do
 		local a = math.rad(45 + 90 * k)
 		local x, y = 0.5 + math.cos(a) * 0.43, 0.5 + math.sin(a) * 0.43
-		local sac = sub(g, x, y, 0.24, 0.24, 2, "Sac")
-		circle(sac, 0.5, 0.5, 1, INK, { z = 1, t = 0.2 })
-		circle(sac, 0.5, 0.5, 0.86, green, { z = 2, grad = { color = shade(rgb(220, 255, 170), deep), rot = 90 } })
-		circle(sac, 0.38, 0.34, 0.26, WHITE, { z = 3, t = 0.35 })
-		circle(sac, 0.6, 0.62, 0.16, deep, { z = 3, t = 0.3 })
+		local sac = sub(g, x, y, 0.24, 0.24, 2, "Canister")
+		sac.Rotation = math.deg(a) + 90 -- standing out from the body
+		box(sac, 0.5, 0.5, 0.62, 1.02, INK, { z = 1, t = 0.15, corner = UDim.new(0.3, 0) })
+		box(sac, 0.5, 0.52, 0.52, 0.76, green, { z = 2, corner = UDim.new(0.25, 0), grad = { color = shade(rgb(220, 255, 170), deep), rot = 0 } })
+		box(sac, 0.36, 0.5, 0.1, 0.6, WHITE, { z = 3, t = 0.45 })
+		box(sac, 0.5, 0.1, 0.6, 0.16, STEEL, { z = 4, corner = UDim.new(0.3, 0), grad = { color = shade(WHITE, STEEL_DARK), rot = 90 } })
+		box(sac, 0.5, 0.92, 0.6, 0.14, STEEL_DARK, { z = 4, corner = UDim.new(0.3, 0) })
 		local bubble = circle(g, x, y, 0.06, green, { z = 1, t = 0.3 })
 		table.insert(sacs, { a = a, k = k, sac = sac, bubble = bubble })
 	end
@@ -504,13 +542,15 @@ function Gear.build(root, muts, color, core)
 			want[id] = true
 		end
 	end
-	if core == "Star" then
-		want.Spikes = true
+	local starOnly = false
+	if core == "Star" and not want.Spikes then
+		want.Spikes, starOnly = true, true
 	end
 	local o = {
 		venom = Gear.fused(muts, "Venom"),
 		blackHole = Gear.fused(muts, "BlackHole"),
 		plague = Gear.fused(muts, "PlagueTrail"),
+		starOnly = starOnly,
 	}
 	if o.blackHole then
 		want.Jaws = nil -- one big dark sucking mouth instead of two mouths

@@ -69,7 +69,7 @@ sheets.push({ file: "skins-3-bundles-colours", title: "Bundles and colours", sec
 const UP = { dx: 0, dz: -1, t: 0.3 };
 const act = (o) => Object.assign({}, UP, o);
 const MUTS = [
-  ["Jaws", "Front", "Jaws", "chews", act({ power: "Chomp", powerAge: 0.17 }), "Chomp: wide snap"],
+  ["Jaws", "Front", "Jaws", "chews", act({ power: "Chomp", powerAge: 0.01 }), "Chomp: wide snap"],
   ["Suction", "Front", "Suction Mouth", "food drifts in", act({ power: "Vacuum", powerAge: 0.5 }), "Vacuum: big vortex"],
   ["Drill", "Front", "Drill Nose", "spins", act({ power: "Pierce", powerAge: 0.5 }), "Pierce: red hot"],
   ["Flagella", "Back", "Flagella Tail", "whips", act({ dash: true, t: 0.41 }), "dashing: fast whip"],
@@ -89,7 +89,7 @@ sheets.push({ file: "lab-1-mutations", title: "Lab mutations on your germ (swimm
 ] });
 const FUS = [["Buzzsaw", act({ dash: true }), "spins hard when dashing"], ["PlagueTrail", act({ t: 0.75 }), "purple poison goo"], ["BlackHole", act({ power: "Vacuum", powerAge: 0.5 }), "one dark vortex mouth"],
   ["Ninja", act({ dash: true }), "camo + jets"], ["Fortress", act({ fight: true, t: 0.157 }), "shell + spikes"], ["Driller", act({ dash: true }), "dash: drill glows"],
-  ["Venom", act({ power: "Chomp", powerAge: 0.17 }), "green venom teeth"], ["Storm", act({ power: "Blast", powerAge: 0.22 }), "blast + gravity well"]];
+  ["Venom", act({ power: "Chomp", powerAge: 0.01 }), "green venom teeth"], ["Storm", act({ power: "Blast", powerAge: 0.22 }), "blast + gravity well"]];
 sheets.push({ file: "lab-2-fusions-and-mix", title: "Fusions, and a fully kitted germ", gear: true, sections: [
   section("Fusions (in action)", FUS.map(([id, a, txt]) => cell(id, labLook({ Front: id, Back: "#" + id }, a, [255, 150, 200]), txt))),
   section("All four slots", [

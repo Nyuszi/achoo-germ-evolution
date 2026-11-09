@@ -17,6 +17,15 @@ local function shot(name, tab)
     table.insert(shots, "{\"name\":\"_hud\",\"tab\":\"\",\"tree\":" .. dump(Ui.gui) .. "}")
     return
   end
+  if name == "_death" then
+    for _, c in ipairs(Ui.gui.__children) do
+      if rawget(c, "ZIndex") == 20 and rawget(c, "BackgroundTransparency") == 0.45 then
+        c.Visible = true
+        table.insert(shots, "{\"name\":\"_death\",\"tab\":\"\",\"tree\":" .. dump(c) .. "}")
+      end
+    end
+    return
+  end
   Ui.open(name)
   local p = Ui.panels[name]
   if tab then

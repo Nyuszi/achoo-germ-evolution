@@ -934,6 +934,9 @@ local function eatFood(cell)
 	if has(germ, "GravityWell") then
 		reach += 25
 	end
+	if has(germ, "Vacuum") then
+		reach += 20 + cell.r * 0.5 -- the vacuum swallows food too, not only germs
+	end
 	local gx0, gx1 = cellOf(cell.x - reach), cellOf(cell.x + reach)
 	local gz0, gz1 = cellOf(cell.z - reach), cellOf(cell.z + reach)
 	local gained, dna, count, golden = 0, 0, 0, false

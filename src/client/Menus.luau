@@ -46,6 +46,10 @@ local function germPicture(parent, size, skin, pos, muts, core)
 	end
 	-- a soft outline, like the body's rim in the game
 	make("UIStroke", { Thickness = math.max(1, size / 30), Color = color:Lerp(Color3.new(0, 0, 0), 0.45), Transparency = 0.2, Parent = disc })
+	if muts and Gear.mouthless(muts) then
+		skin = table.clone(skin)
+		skin.Mouth = "None"
+	end
 	Looks.build(disc, { skin = skin, color = color, flag = flag })
 	-- Lab mutations, swimming up the screen (front at the top)
 	local gear = muts and Gear.build(disc, muts, color, core)

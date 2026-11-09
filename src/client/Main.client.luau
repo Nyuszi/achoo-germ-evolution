@@ -16,6 +16,7 @@ local Renderer = require(script.Parent.Renderer)
 local Fx = require(script.Parent.Fx)
 local Hud = require(script.Parent.Hud)
 local Menus = require(script.Parent.Menus)
+local Ui = require(script.Parent.Ui)
 
 local player = Players.LocalPlayer
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -133,8 +134,11 @@ local lastTotal = 0
 local growCheck = 0
 local lastRadius = Formulas.radius(Config.StartSize)
 
-UserInputService.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseWheel and not Hud.isOverUi(input.Position.X, input.Position.Y) then
+UserInputService.InputChanged:Connect(function(input, processed)
+	-- the wheel scrolls menus, never the camera behind them: no zoom while a menu is open,
+	-- over any of our GUI, or when Roblox already used the wheel (a scrolling list)
+	if input.UserInputType == Enum.UserInputType.MouseWheel and not processed and not Ui.openPanel()
+		and not Hud.isOverUi(input.Position.X, input.Position.Y) then
 		zoom = math.clamp(zoom - input.Position.Z * 0.08, 0.7, 1.6)
 	end
 end)
