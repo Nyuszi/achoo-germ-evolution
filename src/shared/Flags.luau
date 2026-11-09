@@ -237,7 +237,21 @@ end)
 -- Sharp flag pictures: image sheets drawn by tools/flag-atlas.js (16 flags per 1024 px sheet,
 -- 4x4 cells of 256 px, in the data order above). The asset ids come from uploading those sheets;
 -- an empty id means "not uploaded yet" and the game falls back to the emoji.
-Flags.SheetIds = { "", "", "", "", "", "", "", "", "", "", "", "", "" }
+Flags.SheetIds = {
+	"rbxassetid://86190712844598", -- flags-01.png
+	"rbxassetid://72422885442303", -- flags-02.png
+	"rbxassetid://78629841718407", -- flags-03.png
+	"rbxassetid://73728952292944", -- flags-04.png
+	"rbxassetid://138654775873495", -- flags-05.png
+	"rbxassetid://71030425919840", -- flags-06.png
+	"rbxassetid://131371066778802", -- flags-07.png
+	"rbxassetid://94785636968884", -- flags-08.png
+	"rbxassetid://125827853949609", -- flags-09.png
+	"rbxassetid://96762214465489", -- flags-10.png
+	"rbxassetid://126006976770709", -- flags-11.png
+	"rbxassetid://95881548148737", -- flags-12.png
+	"rbxassetid://76589147805067", -- flags-13.png
+}
 Flags.SheetCell = 256
 
 -- Returns image, ImageRectOffset, ImageRectSize for a flag's picture, or nil (use the emoji)
