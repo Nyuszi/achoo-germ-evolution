@@ -246,7 +246,7 @@ end
 local dashButton = moveButton("DASH", 0, 76, "Dash", Color3.fromRGB(80, 170, 255))
 local splitButton = moveButton("SPLIT", 130, 76, "Split", Color3.fromRGB(255, 140, 80))
 local frontButton = moveButton("Q", 0, 14, "Front", Color3.fromRGB(150, 90, 220))
-local specialButton = moveButton("R", 130, 14, "Special", Color3.fromRGB(220, 80, 150))
+local specialButton = moveButton("E", 130, 14, "Special", Color3.fromRGB(220, 80, 150))
 
 -- Thumbstick (phones, bottom left next to the menu bar) ----------------------------------------
 -- Drag inside the ring to swim; tapping anywhere else on the screen still steers too.
@@ -502,7 +502,7 @@ function Hud.tick(dt)
 		splitButton.Text = cooldownText("SPLIT", "[Space]", state.splitIn)
 		dashButton.BackgroundTransparency = state.dashIn > 0.05 and 0.5 or 0
 		splitButton.BackgroundTransparency = state.splitIn > 0.05 and 0.5 or 0
-		for key, b in { Q = frontButton, R = specialButton } do
+		for key, b in { Q = frontButton, E = specialButton } do
 			local ready = math.max(0, (b:GetAttribute("Ready") or 0) - dt)
 			b:SetAttribute("Ready", ready)
 			b.Text = cooldownText(b:GetAttribute("Name") or "", "[" .. key .. "]", ready)

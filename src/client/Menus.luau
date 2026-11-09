@@ -57,7 +57,7 @@ local function statText(id, level)
 	stat("Thorns", "thorns", true)
 	stat("Poison", "poison", true)
 	if m.Active then
-		table.insert(bits, m.ActiveText .. (m.Slot == "Front" and " [Q]" or " [R]"))
+		table.insert(bits, m.ActiveText .. (m.Slot == "Front" and " [Q]" or " [E]"))
 	end
 	return table.concat(bits, " · ")
 end

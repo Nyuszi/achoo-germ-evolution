@@ -260,7 +260,7 @@ end
 bind("GermDash", "Dash", Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonR2)
 bind("GermSplit", "Split", Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
 bind("GermFront", "Front", Enum.KeyCode.Q, Enum.KeyCode.ButtonX)
-bind("GermSpecial", "Special", Enum.KeyCode.R, Enum.KeyCode.ButtonY)
+bind("GermSpecial", "Special", Enum.KeyCode.E, Enum.KeyCode.R, Enum.KeyCode.ButtonY)
 
 -- Frame loop ------------------------------------------------------------------------------------
 local sendTimer, boardTimer, clock = 0, 0, 0
