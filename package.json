@@ -1,0 +1,13 @@
+{
+  "name": "achoo-germ-evolution-tools",
+  "private": true,
+  "scripts": {
+    "test": "node tools/test-formulas.js",
+    "sim": "node tools/sim-server.js 30",
+    "check": "node tools/check-syntax.js"
+  },
+  "devDependencies": {
+    "fengari": "^0.1.4",
+    "luaparse": "^0.3.1"
+  }
+}
