@@ -8,7 +8,9 @@
     "smoke": "node tools/client-smoke.js",
     "sim": "node tools/sim-server.js 30",
     "sim:arena": "ARENA_AT=1 node tools/sim-server.js 12",
-    "all": "node tools/check-syntax.js && node tools/lint-globals.js && node tools/test-formulas.js && node tools/client-smoke.js"
+    "all": "node tools/check-syntax.js && node tools/lint-globals.js && node tools/test-formulas.js && node tools/client-smoke.js",
+    "looks": "node tools/render-looks.js look-previews",
+    "guides": "node tools/render-guides.js guide-previews"
   },
   "devDependencies": {
     "fengari": "^0.1.4",

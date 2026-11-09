@@ -240,10 +240,24 @@ local function buildVisual(cellId)
 				local p = newPart(pattern == "Checkers" and Enum.PartType.Block or Enum.PartType.Ball, c)
 				extra(p, Vector3.one * 0.3, math.cos(a) * 0.55, 0.7, math.sin(a) * 0.55)
 			end
-		elseif pattern == "Stripes" or pattern == "Flames" or pattern == "Swirl" then
-			local c = pattern == "Flames" and Color3.fromRGB(255, 140, 30) or color2
-			for i = -1, 1 do
-				extra(newPart(Enum.PartType.Block, c, pattern == "Flames" and Enum.Material.Neon or Enum.Material.SmoothPlastic), Vector3.new(1.5, 0.08, 0.16), -0.1, 0.92, i * 0.45)
+		elseif pattern == "Stripes" then
+			-- three bands across the back, shorter near the edge so they stay on the body
+			-- (behind the eyes, so they never cover the face)
+			for i, at in { -0.75, -0.35, 0.05 } do
+				extra(newPart(Enum.PartType.Block, color2), Vector3.new(i == 1 and 1.1 or 1.6, 0.08, 0.2), at, 0.92, 0)
+			end
+		elseif pattern == "Flames" then
+			-- flame tongues licking forward from the back
+			for i = -2, 2 do
+				local long = 0.9 - math.abs(i) * 0.15
+				extra(newPart(Enum.PartType.Block, i % 2 == 0 and Color3.fromRGB(255, 140, 30) or Color3.fromRGB(255, 220, 60), Enum.Material.Neon),
+					Vector3.new(0.18, 0.08, long), -0.85 + long / 2, 0.9, i * 0.28)
+			end
+		elseif pattern == "Swirl" then
+			-- a spiral of dots
+			for i = 1, 9 do
+				local a, d = i * 0.9, 0.08 + i * 0.055
+				extra(newPart(Enum.PartType.Ball, color2), Vector3.one * (0.12 + i * 0.01), -0.3 + math.cos(a) * d, 0.95, math.sin(a) * d)
 			end
 		end
 	end

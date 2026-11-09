@@ -124,7 +124,7 @@ local services = {
   Players = { LocalPlayer = player },
   ReplicatedStorage = { Shared = { Config = { __name = "Config" }, Formulas = { __name = "Formulas" }, Flags = { __name = "Flags" }, Names = { __name = "Names" } }, WaitForChild = function() return REMOTES end },
   TweenService = { Create = function() return { Play = noop } end },
-  UserInputService = { TouchEnabled = false, KeyboardEnabled = true, GetFocusedTextBox = function() return nil end },
+  UserInputService = { TouchEnabled = MENU_TOUCH == true, KeyboardEnabled = MENU_TOUCH ~= true, GetFocusedTextBox = function() return nil end },
   SocialService = {},
   Lighting = Inst.new("Lighting"),
 }
@@ -245,7 +245,7 @@ local profile = { Dna = 99999, Levels = { Jaws = 5, Suction = 5, Spikes = 2 }, F
   Season = 1, SeasonLeft = 100000, ArenaUnlocked = true, Rank = "Cough" }
 Menus.setProfile(profile)
 if MENU_SHOTS then
-  state.mode = "host" state.nextGate = { name = "Sneeze", size = 25000 } state.size = 9000 Hud.sync(state) Hud.setStick(true)
+  state.mode = "host" state.nextGate = { name = "Sneeze", size = 25000 } state.size = 9000 state.quarantine = 0 state.protected = false state.actives = { Front = { id = "Chomp", readyIn = 0 }, Special = { id = "Blast", readyIn = 0 } } state.dashIn = 0 state.splitIn = 0 Hud.sync(state) Hud.tick(0.01) Hud.setStick(MENU_TOUCH == true)
   __MENU_DUMP__
   return
 end
@@ -268,7 +268,7 @@ Ui.open("Arena")
 print("calls made: " .. #CALLS)
 print("CLIENT SMOKE OK")
 `;
-let code = prelude;
+let code = (process.env.MENU_TOUCH ? "MENU_TOUCH = true\n" : "") + prelude;
 for (const n of ["Config", "Formulas", "Flags", "Names"]) code += wrap(n, read(`shared/${n}.luau`));
 for (const n of ["Ui", "Renderer", "Fx", "Hud", "Menus"]) code += wrap(n, read(`client/${n}.luau`));
 let runCode = run;

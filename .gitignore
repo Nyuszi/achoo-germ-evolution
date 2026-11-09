@@ -2,3 +2,5 @@
 *.rbxlx.lock
 node_modules/
 menu-previews/
+look-previews/
+guide-previews/

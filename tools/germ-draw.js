@@ -1,0 +1,132 @@
+// Draws a germ from above in a <canvas>, using the same parts, sizes and offsets as
+// src/client/Renderer.luau (buildVisual). Shared by the picture tools. Roblox materials
+// (Glass, Neon, Lava...) are only imitated with simple paint.
+// Exports a string of browser JS defining drawGerm(g, x, y, r, look, t).
+module.exports = String.raw`
+const WHITE = [255,255,255], BLACK = [25,25,35];
+const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+const css = (c, a) => "rgba(" + c.map(Math.round).join(",") + "," + (a == null ? 1 : a) + ")";
+const TRAILS = { Bubbles: [[180,230,255],[255,255,255]], Sparkles: [[255,240,150],[255,255,255]], SlimeTrail: [[120,230,90],[60,160,40]],
+  Hearts: [[255,120,170],[255,200,220]], Fire: [[255,200,40],[255,60,20]], ArenaFlame: [[120,255,220],[40,120,255]], ArenaLightning: [[255,255,120],[160,120,255]] };
+const BODY = { Jelly: ["SmoothPlastic", 0.12], Fuzzy: ["Fabric", 0], Slime: ["Glass", 0.25], Crystal: ["Glass", 0.35], Lava: ["CrackedLava", 0],
+  Galaxy: ["Neon", 0.1], Candy: ["Plastic", 0], Robot: ["DiamondPlate", 0], Champion: ["Foil", 0] };
+function parts(look) {
+  const skin = look.skin || {}, color = look.color, color2 = skin.Color2 || WHITE, muts = look.muts || {};
+  const P = [];
+  const ex = (shape, c, size, fwd, up, right, extra) => P.push(Object.assign({ shape, c, size, fwd, up, right }, extra || {}));
+  const eyes = skin.Eyes || "Cute";
+  let eyeK = 0.42, pupilK = 0.2;
+  if (eyes === "Googly") { eyeK = 0.55; pupilK = 0.18; } else if (eyes === "Sleepy") pupilK = 0.3;
+  if (eyes === "Cyclops") { ex("ball", WHITE, [0.6,0.6,0.6], 0.42, 0.75, 0); ex("ball", BLACK, [0.28,0.28,0.28], 0.55, 0.95, 0); }
+  else {
+    const list = eyes === "Three" ? [-0.4, 0, 0.4] : [-0.32, 0.32];
+    for (const s of list) { ex("ball", WHITE, [eyeK,eyeK,eyeK], 0.42, 0.75, s); ex("ball", BLACK, [pupilK,pupilK,pupilK], 0.52, 0.92, s); }
+    if (eyes === "Angry" || eyes === "Sleepy") for (const s of [-0.32, 0.32]) ex("block", lerp(color, BLACK, 0.5), [0.4,0.08,0.12], 0.45, 1.0, s, { tilt: eyes === "Angry" ? (s < 0 ? 0.35 : -0.35) : 0 });
+  }
+  const mouth = skin.Mouth || "Smile";
+  if (mouth === "Smile" || mouth === "Braces") ex("block", mouth === "Braces" ? [190,190,200] : BLACK, [0.4,0.06,0.1], 0.85, 0.35, 0);
+  else if (mouth === "Fangs") { ex("block", WHITE, [0.1,0.1,0.2], 0.9, 0.3, -0.12); ex("block", WHITE, [0.1,0.1,0.2], 0.9, 0.3, 0.12); }
+  else if (mouth === "Tongue") ex("ball", [255,120,150], [0.28,0.28,0.28], 0.95, 0.3, 0);
+  else if (mouth === "Mustache") ex("block", [70,45,30], [0.5,0.1,0.14], 0.85, 0.45, 0);
+  const pat = skin.Pattern || "None";
+  if (pat === "Spots" || pat === "Camo" || pat === "Checkers") {
+    const n = pat === "Spots" ? 5 : 7;
+    for (let i = 1; i <= n; i++) { const a = i / n * Math.PI * 2; let c = color2; if (pat === "Camo") c = lerp(color, [60,80,40], 0.5 + (i % 2) * 0.2);
+      ex(pat === "Checkers" ? "block" : "ball", c, [0.3,0.3,0.3], Math.cos(a) * 0.55, 0.7, Math.sin(a) * 0.55); }
+  } else if (pat === "Stripes") { [-0.75, -0.35, 0.05].forEach((at, i) => ex("block", color2, [i === 0 ? 1.1 : 1.6, 0.08, 0.2], at, 0.92, 0)); }
+  else if (pat === "Flames") { for (const i of [-2,-1,0,1,2]) { const long = 0.9 - Math.abs(i) * 0.15; ex("block", i % 2 === 0 ? [255,140,30] : [255,220,60], [0.18,0.08,long], -0.85 + long / 2, 0.9, i * 0.28, { neon: true }); } }
+  else if (pat === "Swirl") { for (let i = 1; i <= 9; i++) { const a = i * 0.9, d = 0.08 + i * 0.055, k = 0.12 + i * 0.01; ex("ball", color2, [k,k,k], -0.3 + Math.cos(a) * d, 0.95, Math.sin(a) * d); } }
+  const has = (slot, id) => muts[slot] === id;
+  const bone = [245,245,230];
+  if (has("Front","Jaws")) { ex("block", bone, [0.25,0.3,0.55], 1.0, 0, -0.25); ex("block", bone, [0.25,0.3,0.55], 1.0, 0, 0.25); }
+  if (has("Front","Suction")) ex("disc", lerp(color, [255,120,150], 0.5), [0.3,0.7,0.7], 1.0, 0, 0, { flatSide: true });
+  if (has("Front","Drill")) ex("tri", [170,170,185], [0.3,0.3,0.8], 1.15, 0, 0);
+  if (has("Back","Flagella")) ex("block", lerp(color, BLACK, 0.2), [0.18,0.12,1.3], -1.35, 0, 0, { wavy: true });
+  if (has("Back","Jet")) { ex("disc", [255,160,60], [0.3,0.35,0.35], -1.05, 0, -0.3, { neon: true }); ex("disc", [255,160,60], [0.3,0.35,0.35], -1.05, 0, 0.3, { neon: true }); }
+  if (has("Back","Slime")) ex("ball", [120,230,90], [0.7,0.7,0.7], -1.1, -0.3, 0, { alpha: 0.6 });
+  if (has("Sides","Spikes")) for (let i = 1; i <= 8; i++) { const a = i / 8 * Math.PI * 2; ex("block", lerp(color, BLACK, 0.45), [0.22,0.22,0.6], Math.cos(a) * 1.05, 0, Math.sin(a) * 1.05, { rot: a }); }
+  if (has("Sides","Toxin")) for (let i = 1; i <= 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4; ex("ball", [150,255,80], [0.25,0.25,0.25], Math.cos(a) * 0.95, 0.2, Math.sin(a) * 0.95, { neon: true }); }
+  if (has("Special","Magnet")) { ex("block", [230,60,60], [0.25,0.4,0.25], 0, 1.0, -0.2); ex("block", [60,90,230], [0.25,0.4,0.25], 0, 1.0, 0.2); }
+  if (has("Special","Sneezer")) ex("ball", lerp(color, [255,120,120], 0.5), [0.3,0.3,0.3], 0.95, 0.55, 0);
+  const hat = skin.Hat || "None";
+  if (hat === "Crown") ex("crown", [255,205,50], [0.35,0.6,0.6], 0, 1.15, 0, { neon: true });
+  else if (hat === "Party") { ex("cone", [255,90,200], [0.35,0.6,0.35], 0, 1.2, 0); ex("ball", [255,240,90], [0.2,0.2,0.2], 0, 1.55, 0); }
+  else if (hat === "Propeller") { ex("ball", [80,160,255], [0.5,0.5,0.5], 0, 1.0, 0); ex("block", [255,80,80], [1.0,0.06,0.15], 0, 1.28, 0, { rot: 0.6 }); }
+  else if (hat === "Halo") ex("ring", [255,250,180], [0.08,1.0,1.0], 0, 1.5, 0, { neon: true });
+  else if (hat === "Horns") { ex("cone", [200,40,40], [0.15,0.45,0.15], 0.2, 1.0, -0.35, { big: 1.6 }); ex("cone", [200,40,40], [0.15,0.45,0.15], 0.2, 1.0, 0.35, { big: 1.6 }); }
+  else if (hat === "Laurel") ex("ring", [90,200,90], [0.12,1.1,1.1], 0, 1.0, 0, { leaves: true });
+  return P;
+}
+function paintBody(g, x, y, r, look) {
+  const skin = look.skin || {}, color = look.color;
+  const [mat, tr] = BODY[skin.Body || "Jelly"] || BODY.Jelly;
+  g.save(); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.closePath();
+  if (look.flag) {
+    g.fillStyle = css(color); g.fill(); g.clip();
+    g.font = Math.round(r * 2.6) + "px 'Noto Color Emoji', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(look.flag, x, y + r * 0.08);
+  } else {
+    const grad = g.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+    let base = color;
+    if (mat === "Neon") { grad.addColorStop(0, css(lerp(color, WHITE, 0.5))); grad.addColorStop(1, css(lerp(color, [90,40,160], 0.5))); }
+    else if (mat === "Foil") { grad.addColorStop(0, css([255,245,180])); grad.addColorStop(0.5, css([230,180,60])); grad.addColorStop(1, css([150,100,30])); }
+    else { grad.addColorStop(0, css(lerp(base, WHITE, mat === "Glass" ? 0.55 : 0.3), 1 - tr)); grad.addColorStop(1, css(lerp(base, BLACK, mat === "Fabric" ? 0.25 : 0.15), 1 - tr * 0.6)); }
+    g.fillStyle = grad; g.fill(); g.clip();
+    // material texture
+    let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    if (mat === "Fabric") { for (let i = 0; i < 260; i++) { g.fillStyle = css(lerp(color, i % 2 ? WHITE : BLACK, 0.25), 0.35); g.fillRect(x - r + rnd() * 2 * r, y - r + rnd() * 2 * r, r * 0.04, r * 0.04); } }
+    if (mat === "CrackedLava") { g.strokeStyle = css([255,120,30]); g.lineWidth = r * 0.05; for (let i = 0; i < 9; i++) { g.beginPath(); let px = x - r + rnd() * 2 * r, py = y - r + rnd() * 2 * r; g.moveTo(px, py); for (let k = 0; k < 4; k++) { px += (rnd() - 0.5) * r * 0.6; py += (rnd() - 0.5) * r * 0.6; g.lineTo(px, py); } g.stroke(); } }
+    if (mat === "Neon") { for (let i = 0; i < 40; i++) { g.fillStyle = "rgba(255,255,255," + (0.4 + rnd() * 0.6) + ")"; const s = r * (0.015 + rnd() * 0.03); g.fillRect(x - r + rnd() * 2 * r, y - r + rnd() * 2 * r, s, s); } }
+    if (mat === "DiamondPlate") { g.strokeStyle = "rgba(255,255,255,0.35)"; g.lineWidth = r * 0.03; for (let i = -6; i <= 6; i++) for (let k = -6; k <= 6; k++) { const px = x + i * r * 0.18, py = y + k * r * 0.18 + (i % 2) * r * 0.09; g.beginPath(); g.moveTo(px - r * 0.04, py - r * 0.04); g.lineTo(px + r * 0.04, py + r * 0.04); g.stroke(); } }
+    if (skin.Body === "Crystal") { g.strokeStyle = "rgba(255,255,255,0.6)"; g.lineWidth = r * 0.03; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); g.stroke(); } }
+    if (skin.Body === "Candy") { g.strokeStyle = "rgba(255,255,255,0.55)"; g.lineWidth = r * 0.14; for (let i = -4; i <= 4; i++) { g.beginPath(); g.moveTo(x + i * r * 0.45 - r, y - r); g.lineTo(x + i * r * 0.45 + r, y + r); g.stroke(); } }
+    // shine
+    g.fillStyle = "rgba(255,255,255," + (mat === "Fabric" ? 0.08 : 0.3) + ")"; g.beginPath(); g.ellipse(x - r * 0.38, y - r * 0.42, r * 0.28, r * 0.16, -0.6, 0, Math.PI * 2); g.fill();
+  }
+  g.restore();
+  g.lineWidth = Math.max(1.5, r * 0.04); g.strokeStyle = css(lerp(color, BLACK, 0.45), 0.8); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
+  if (!look.flag) { g.fillStyle = css(lerp(color, BLACK, 0.35), 0.35); g.beginPath(); g.arc(x, y + r * 0.2, r * 0.4, 0, Math.PI * 2); g.fill(); }
+}
+// (x, y) = centre on the canvas, r = radius in px, facing up the screen
+function drawGerm(g, x, y, r, look, t) {
+  t = t || 0;
+  const skin = look.skin || {};
+  const trail = TRAILS[skin.Trail];
+  if (trail) {
+    const len = r * 3.2, grad = g.createLinearGradient(x, y + r * 0.2, x, y + r + len);
+    grad.addColorStop(0, css(trail[0], 0.8)); grad.addColorStop(1, css(trail[1], 0));
+    g.fillStyle = grad; g.beginPath(); g.moveTo(x - r * 0.8, y); g.lineTo(x + r * 0.8, y); g.lineTo(x + r * 0.15, y + r + len); g.lineTo(x - r * 0.15, y + r + len); g.closePath(); g.fill();
+    const icon = { Bubbles: "○", Sparkles: "✦", Hearts: "♥", Fire: "▲", SlimeTrail: "●", ArenaFlame: "▲", ArenaLightning: "ϟ" }[skin.Trail];
+    g.fillStyle = css(trail[0]); g.textAlign = "center"; g.textBaseline = "middle";
+    for (let i = 0; i < 6; i++) { g.font = Math.round(r * (0.45 - i * 0.05)) + "px sans-serif"; g.fillText(icon, x + Math.sin(i * 2.1) * r * 0.45, y + r * 1.3 + i * r * 0.45); }
+  }
+  const P = parts(look);
+  const lift = look.flag ? 0.8 : 0;
+  // lower parts first (things under the body: tail, jaws, spikes...)
+  const under = P.filter(p => p.up < 0.2 && !(p.up > 0)).filter(p => Math.hypot(p.fwd, p.right) > 0.7);
+  const over = P.filter(p => !under.includes(p)).sort((a, b) => a.up - b.up);
+  const at = (p) => [x + p.right * r, y - p.fwd * r];
+  const drawPart = (p) => {
+    const [px, py] = at(p);
+    const c = p.c, a = p.alpha || 1;
+    g.save(); g.translate(px, py);
+    if (p.neon) { g.shadowColor = css(c); g.shadowBlur = r * 0.25; }
+    g.fillStyle = css(c, a); g.strokeStyle = css(lerp(c, BLACK, 0.5), 0.7); g.lineWidth = Math.max(1, r * 0.025);
+    const sx = p.size[0] * r, sz = p.size[2] * r, sy = p.size[1] * r;
+    if (p.shape === "ball") { g.beginPath(); g.arc(0, 0, sx / 2, 0, Math.PI * 2); g.fill(); g.stroke();
+      if (c === WHITE || (c[0] > 240 && c[1] > 240)) { g.fillStyle = "rgba(255,255,255,0.9)"; } }
+    else if (p.shape === "block") { g.rotate(p.rot ? Math.PI / 2 - p.rot : (p.tilt || 0)); if (p.wavy) { g.lineWidth = sx; g.strokeStyle = css(c); g.lineCap = "round"; g.beginPath(); for (let k = 0; k <= 10; k++) { const yy = -sz / 2 + sz * k / 10; const xx = Math.sin(k * 0.9 + t * 12) * r * 0.12; k ? g.lineTo(xx, yy) : g.moveTo(xx, yy); } g.stroke(); }
+      else { g.beginPath(); g.roundRect(-sx / 2, -sz / 2, sx, sz, Math.min(sx, sz) * 0.25); g.fill(); g.stroke(); } }
+    else if (p.shape === "disc") { g.beginPath(); g.ellipse(0, 0, sy / 2, sx / 2 + sy * 0.15, 0, 0, Math.PI * 2); g.fill(); g.stroke(); g.fillStyle = css(lerp(c, BLACK, 0.4)); g.beginPath(); g.arc(0, 0, sy * 0.2, 0, Math.PI * 2); g.fill(); }
+    else if (p.shape === "tri") { g.beginPath(); g.moveTo(0, -sz / 2 - r * 0.15); g.lineTo(sx / 2, sz / 2); g.lineTo(-sx / 2, sz / 2); g.closePath(); g.fill(); g.stroke(); }
+    else if (p.shape === "crown") { g.beginPath(); const n = 5, R = sy / 2; for (let i = 0; i < n * 2; i++) { const ang = i / (n * 2) * Math.PI * 2 - Math.PI / 2, rr = i % 2 ? R * 0.6 : R; g.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr); } g.closePath(); g.fill(); g.stroke(); }
+    else if (p.shape === "cone") { const R = sx / 2 * (p.big || 1); g.beginPath(); g.arc(0, 0, R * 1.3, 0, Math.PI * 2); g.fill(); g.stroke(); g.fillStyle = css(lerp(c, WHITE, 0.4)); g.beginPath(); g.arc(0, 0, R * 0.45, 0, Math.PI * 2); g.fill(); }
+    else if (p.shape === "ring") { g.lineWidth = Math.max(2, sx * (p.leaves ? 1.6 : 1.2)); g.strokeStyle = css(c, 0.9); g.beginPath(); g.arc(0, 0, sy / 2, 0, Math.PI * 2); g.stroke();
+      if (p.leaves) { g.fillStyle = css(lerp(c, BLACK, 0.2)); for (let i = 0; i < 14; i++) { const ang = i / 14 * Math.PI * 2; g.beginPath(); g.ellipse(Math.cos(ang) * sy / 2, Math.sin(ang) * sy / 2, r * 0.09, r * 0.04, ang + 0.8, 0, Math.PI * 2); g.fill(); } } }
+    g.restore();
+  };
+  under.forEach(drawPart);
+  paintBody(g, x, y, r, look);
+  over.forEach(drawPart);
+}
+`;
