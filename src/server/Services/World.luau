@@ -75,11 +75,13 @@ function World.newDish(kind, index, layout)
 		food = {},
 		foodGrid = {},
 		zoneFoodCount = {},
+		zoneCrumbCount = {},
 		bubbles = {},
 		crowned = nil,
 		foodAdded = {},
 		foodRemoved = {},
 		cellsGone = {},
+		eatenBy = {}, -- [tostring(cellId)] = eater cellId, sent with cellsGone
 		info = { cells = {}, germs = {} },
 		infoDirty = false,
 		effects = { foodMult = 1, damageMult = 1, dnaMult = 1, pushX = 0, pushZ = 0, pull = 0, burnFrom = nil, burnRate = 0 },
@@ -146,9 +148,15 @@ World.fireDish = fireDish
 
 -- Food -------------------------------------------------------------------------------------
 
-local function addFood(dish, x, z, value, zone, golden)
+-- big = a big crumb (see Config.BigFood): it counts toward its zone's crumbs, not its pellets
+local function addFood(dish, x, z, value, zone, golden, big)
 	local id = newId()
-	local pellet = { id = id, x = x, z = z, v = value, zone = zone, golden = golden }
+	local pellet = { id = id, x = x, z = z, v = value, zone = (not big) and zone or nil, golden = golden }
+	if big then
+		pellet.need = value * Config.BigFood.NeedMult
+		pellet.crumbZone = zone
+		dish.zoneCrumbCount[zone] = (dish.zoneCrumbCount[zone] or 0) + 1
+	end
 	dish.food[id] = pellet
 	local key = gridKey(cellOf(x), cellOf(z))
 	local bucket = dish.foodGrid[key]
@@ -166,7 +174,7 @@ local function addFood(dish, x, z, value, zone, golden)
 	table.insert(list, math.floor((x + dish.cx) * 10) / 10)
 	table.insert(list, math.floor((z + dish.cz) * 10) / 10)
 	table.insert(list, value / dish.scale)
-	table.insert(list, golden and 1 or 0)
+	table.insert(list, golden and 1 or big and 2 or 0)
 	return pellet
 end
 World.addFood = addFood
@@ -179,6 +187,9 @@ local function removeFood(dish, pellet)
 	end
 	if pellet.zone then
 		dish.zoneFoodCount[pellet.zone] -= 1
+	end
+	if pellet.crumbZone then
+		dish.zoneCrumbCount[pellet.crumbZone] -= 1
 	end
 	table.insert(dish.foodRemoved, pellet.id)
 end
@@ -206,6 +217,11 @@ function World.refillFood(dish)
 		for _ = 1, math.min(missing, 8) do
 			local x, z = World.randomInZone(dish, zone)
 			addFood(dish, x, z, info.FoodValue * dish.scale, zone, false)
+		end
+		local crumbs = math.floor(info.FoodCount * Config.BigFood.Share)
+		if (dish.zoneCrumbCount[zone] or 0) < crumbs and math.random() < Config.BigFood.RefillChance then
+			local x, z = World.randomInZone(dish, zone, 10)
+			addFood(dish, x, z, info.FoodValue * Config.BigFood.ValueMult * dish.scale, zone, false, true)
 		end
 	end
 end
@@ -252,7 +268,7 @@ function World.nearestFood(dish, x, z, reach, size)
 					local dx, dz = pellet.x - x, pellet.z - z
 					local d = dx * dx + dz * dz
 					local fromCentre = pellet.x * pellet.x + pellet.z * pellet.z
-					if fromCentre < minDist * minDist or fromCentre > maxDist * maxDist then
+					if fromCentre < minDist * minDist or fromCentre > maxDist * maxDist or (pellet.need and size and size < pellet.need) then
 						d = math.huge
 					elseif pellet.golden then
 						d *= 0.1
@@ -274,7 +290,7 @@ function World.foodList(dish)
 		table.insert(list, math.floor((p.x + dish.cx) * 10) / 10)
 		table.insert(list, math.floor((p.z + dish.cz) * 10) / 10)
 		table.insert(list, p.v / dish.scale)
-		table.insert(list, p.golden and 1 or 0)
+		table.insert(list, p.golden and 1 or p.need and 2 or 0)
 	end
 	return list
 end
@@ -392,7 +408,11 @@ local function addCell(germ, size, x, z)
 	return cell
 end
 
-local function removeCell(cell)
+-- by = the cell that swallowed it (clients animate it being gulped), or nil
+local function removeCell(cell, by)
+	if by then
+		cell.dish.eatenBy[tostring(cell.id)] = by.id
+	end
 	cells[cell.id] = nil
 	cell.dish.cells[cell.id] = nil
 	cell.germ.cells[cell.id] = nil
@@ -545,33 +565,44 @@ function World.split(germ)
 	if not germ.alive or now < germ.splitReadyAt or germ.npc then
 		return false
 	end
-	local count, biggest = 0, nil
+	-- every cell that is big enough splits in two (biggest first), up to MaxCells, and each half
+	-- shoots toward where you steer. Press again to split again.
+	local list, count = {}, 0
 	for _, cell in germ.cells do
 		count += 1
-		if not biggest or cell.size > biggest.size then
-			biggest = cell
-		end
+		table.insert(list, cell)
 	end
-	if count >= s.MaxCells or not biggest or biggest.size < s.MinSize * germ.dish.scale then
+	table.sort(list, function(a, b)
+		return a.size > b.size
+	end)
+	local split = 0
+	for _, cell in list do
+		if count >= s.MaxCells or cell.size < s.MinSize * germ.dish.scale then
+			break
+		end
+		local half = cell.size / 2
+		cell.size = half
+		cell.r = Formulas.radius(half, germ.dish.scale)
+		local dx, dz = 1, 0
+		if germ.target then
+			dx, dz = germ.target.x - cell.x, germ.target.z - cell.z
+			local len = math.sqrt(dx * dx + dz * dz)
+			if len < 0.01 then
+				dx, dz = 1, 0
+			else
+				dx, dz = dx / len, dz / len
+			end
+		end
+		local new = addCell(germ, half, cell.x + dx * cell.r, cell.z + dz * cell.r)
+		new.vx, new.vz = dx * s.LaunchSpeed, dz * s.LaunchSpeed
+		new.mergeAt = now + s.MergeSeconds
+		cell.mergeAt = now + s.MergeSeconds
+		count += 1
+		split += 1
+	end
+	if split == 0 then
 		return false
 	end
-	local half = biggest.size / 2
-	biggest.size = half
-	biggest.r = Formulas.radius(half, germ.dish.scale)
-	local dx, dz = 1, 0
-	if germ.target then
-		dx, dz = germ.target.x - biggest.x, germ.target.z - biggest.z
-		local len = math.sqrt(dx * dx + dz * dz)
-		if len < 0.01 then
-			dx, dz = 1, 0
-		else
-			dx, dz = dx / len, dz / len
-		end
-	end
-	local new = addCell(germ, half, biggest.x + dx * biggest.r, biggest.z + dz * biggest.r)
-	new.vx, new.vz = dx * s.LaunchSpeed, dz * s.LaunchSpeed
-	new.mergeAt = now + s.MergeSeconds
-	biggest.mergeAt = now + s.MergeSeconds
 	germ.splitReadyAt = now + s.Cooldown
 	queueInfo(germ)
 	return true
@@ -687,7 +718,7 @@ local function eatCell(eaterCell, preyCell)
 	eaterCell.r = Formulas.radius(eaterCell.size, dish.scale)
 	burstFood(dish, preyCell.x, preyCell.z, burst, preyCell.r + 4)
 	local preySize = preyCell.size
-	removeCell(preyCell)
+	removeCell(preyCell, eaterCell)
 
 	local feeds = eater.recentFeeds[victim.id]
 	if feeds and now - feeds.time > Config.FeedWindowSeconds then
@@ -773,9 +804,18 @@ local function bossContact(bossCell, otherCell, dt)
 	local boss, other = bossCell.germ, otherCell.germ
 	local npc = boss.npc
 	if npc.kind == "antibody" then
-		if not other.npc and not World.isProtected(other) then
-			World.addEffect(other, "Slow", Config.Immune.Antibodies.SlowSeconds)
-			World.hooks.gainDna(other, Config.Immune.Antibodies.Dna)
+		if not other.npc and not World.isProtected(other) and not npc.popped then
+			local A = Config.Immune.Antibodies
+			if Formulas.canEat(otherCell.size, bossCell.size) then
+				-- big enough: swallow it (a snack) instead of getting slowed
+				otherCell.size += bossCell.size * A.EatShare
+				otherCell.r = Formulas.radius(otherCell.size, otherCell.dish.scale)
+				World.hooks.gainDna(other, A.Dna * A.EatDnaMult)
+				otherCell.dish.eatenBy[tostring(bossCell.id)] = otherCell.id
+			else
+				World.addEffect(other, "Slow", A.SlowSeconds)
+				World.hooks.gainDna(other, A.Dna)
+			end
 			npc.popped = true
 		end
 		return
@@ -842,7 +882,7 @@ local function interact(dish, dt)
 								end
 								big.size += small.size
 								big.r = Formulas.radius(big.size, dish.scale)
-								removeCell(small)
+								removeCell(small, big)
 							end
 						else
 							separate(a, b, dist, 0.5)
@@ -899,7 +939,8 @@ local function eatFood(cell)
 			if bucket then
 				for _, pellet in bucket do
 					local dx, dz = pellet.x - cell.x, pellet.z - cell.z
-					if dx * dx + dz * dz <= reach * reach then
+					-- a big crumb only goes down once the cell is big enough for it
+					if dx * dx + dz * dz <= reach * reach and (not pellet.need or cell.size >= pellet.need) then
 						gained += pellet.v
 						dna += pellet.v / dish.scale * Config.DnaPerFood
 						count += 1
@@ -1007,6 +1048,7 @@ local function sendSnapshot(dish)
 		dish.info = { cells = {}, germs = {} }
 		dish.infoDirty = false
 		dish.cellsGone, dish.foodAdded, dish.foodRemoved = {}, {}, {}
+		dish.eatenBy = {}
 		return
 	end
 	local count = 0
@@ -1054,8 +1096,9 @@ local function sendSnapshot(dish)
 		dish.infoDirty = false
 	end
 	if #dish.cellsGone > 0 then
-		fireDish(dish, Net.CellGone, dish.cellsGone)
+		fireDish(dish, Net.CellGone, dish.cellsGone, dish.eatenBy)
 		dish.cellsGone = {}
+		dish.eatenBy = {}
 	end
 	if #dish.foodAdded > 0 or #dish.foodRemoved > 0 then
 		fireDish(dish, Net.FoodDelta, dish.foodAdded, dish.foodRemoved)

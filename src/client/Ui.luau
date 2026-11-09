@@ -86,7 +86,9 @@ function Ui.button(props, onClick)
 	local b = make("TextButton", props, { Ui.corner(12) })
 	Ui.stroke(2).Parent = b
 	make("UITextSizeConstraint", { MaxTextSize = 22, Parent = b })
-	b.Activated:Connect(onClick)
+	if onClick then
+		b.Activated:Connect(onClick)
+	end
 	return b
 end
 

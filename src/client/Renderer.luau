@@ -30,7 +30,11 @@ local dishId = 0
 local foodParts = {} -- [foodId] = part
 local spare = {} -- unused food parts
 local goldenFood = {} -- [foodId] = { x, z }
+local foodAt = {} -- [foodId] = { x, y, z, d } (where each pellet is drawn)
 local latest = {} -- [cellId] = { x, z, size, flags }
+local sucking = {} -- food being sucked into a germ: { part, x, z, d, cell, t }
+local dying = {} -- cells being swallowed (or fading out): { v, eater, t, r }
+local SUCK_TIME, GULP_TIME = 0.16, 0.24
 
 local function newPart(shape, color, material, transparency, parent)
 	local p = Instance.new("Part")
@@ -72,27 +76,65 @@ local function addFood(id, x, z, value, golden)
 		p = newPart(Enum.PartType.Ball, nil, Enum.Material.Neon, 0, foodFolder)
 	end
 	local d = math.min(3, 0.8 + math.sqrt(value) * 0.3)
+	local y = d / 2
+	p.Material = Enum.Material.Neon
 	if golden == 1 then
 		goldenFood[id] = { x = x, z = z }
 		d = 5
+		y = d / 2
 		p.Color = Color3.fromRGB(255, 200, 40)
+	elseif golden == 2 then
+		-- a big crumb, drawn exactly as big as a germ must be to eat it (bigger than it = you can).
+		-- Mostly sunk into the floor so small germs swim visibly over it.
+		d = Formulas.radius(value * Config.BigFood.NeedMult, 1) * 2
+		y = -d * 0.25
+		p.Color = Color3.fromRGB(235, 175, 105)
+		p.Material = Enum.Material.Sand
 	else
 		p.Color = FOOD_COLORS[(id % #FOOD_COLORS) + 1]
 	end
 	p.Size = Vector3.one * d
-	p.CFrame = CFrame.new(x, d / 2, z)
+	p.CFrame = CFrame.new(x, y, z)
+	foodAt[id] = { x, y, z, d }
 	p.Transparency = 0
 	foodParts[id] = p
 end
 
-local function removeFood(id)
+local function hideFood(p)
+	p.Transparency = 1
+	p.CFrame = CFrame.new(0, -100, 0)
+	table.insert(spare, p)
+end
+
+-- The germ cell whose mouth is closest to (x, z), if one is right there (it just ate the food)
+local function eaterNear(x, z)
+	local best, bestD = nil, math.huge
+	for id, v in Renderer.cells do
+		if v.x and v.info.npc ~= "antibody" then
+			local dx, dz = v.x - x, v.z - z
+			local d = math.sqrt(dx * dx + dz * dz) - v.r
+			if d < bestD and d < 10 then
+				best, bestD = id, d
+			end
+		end
+	end
+	return best
+end
+
+-- animate = the food was eaten: it gets sucked into the nearest germ instead of vanishing
+local function removeFood(id, animate)
 	local p = foodParts[id]
+	local at = foodAt[id]
 	goldenFood[id] = nil
+	foodAt[id] = nil
 	if p then
 		foodParts[id] = nil
-		p.Transparency = 1
-		p.CFrame = CFrame.new(0, -100, 0)
-		table.insert(spare, p)
+		local cell = animate and at and eaterNear(at[1], at[3])
+		if cell then
+			table.insert(sucking, { part = p, x = at[1], y = at[2], z = at[3], d = at[4], cell = cell, t = 0 })
+		else
+			hideFood(p)
+		end
 	end
 end
 
@@ -107,7 +149,7 @@ end
 
 function Renderer.foodDelta(added, removed)
 	for _, id in removed do
-		removeFood(id)
+		removeFood(id, true)
 	end
 	for i = 1, #added, 5 do
 		addFood(added[i], added[i + 1], added[i + 2], added[i + 3], added[i + 4])
@@ -420,6 +462,14 @@ local function clearAll()
 	for _, v in Renderer.cells do
 		v.model:Destroy()
 	end
+	for _, d in dying do
+		d.v.model:Destroy()
+	end
+	dying = {}
+	for _, s in sucking do
+		hideFood(s.part)
+	end
+	sucking = {}
 	Renderer.cells = {}
 	Renderer.cellGerm = {}
 	Renderer.germInfo = {}
@@ -459,11 +509,24 @@ function Renderer.applyInfo(payload)
 	end
 end
 
-function Renderer.removeCells(ids)
+-- eatenBy = { [tostring(cellId)] = eater cellId } for cells that were swallowed: those fly into
+-- the eater's mouth (which chomps); other cells shrink away where they are.
+function Renderer.removeCells(ids, eatenBy)
 	for _, id in ids do
 		local v = Renderer.cells[id]
 		if v then
-			v.model:Destroy()
+			local eater = eatenBy and eatenBy[tostring(id)]
+			if v.x then
+				v.tag.Enabled = false
+				table.insert(dying, { v = v, eater = eater, t = 0, r = v.r })
+				local ev = eater and Renderer.cells[eater]
+				if ev and ev ~= v then
+					ev.chomp = 1
+					ev.pulse = 1
+				end
+			else
+				v.model:Destroy()
+			end
 		end
 		Renderer.cells[id] = nil
 		Renderer.cellGerm[id] = nil
@@ -534,7 +597,12 @@ function Renderer.update(dt, t)
 			v.x, v.z = nx, nz
 			v.size = v.size + (s.size - v.size) * k
 			v.r = Formulas.radius(v.size, 1)
-			if math.abs(v.r - v.drawnR) > v.drawnR * 0.01 then
+			-- a gulp makes the body bulge for a moment
+			local pulse = v.pulse or 0
+			if pulse > 0 then
+				v.pulse = math.max(0, pulse - dt * 4)
+				resize(v, v.r * (1 + 0.12 * math.sin(math.min(1, pulse) * math.pi)))
+			elseif math.abs(v.r - v.drawnR) > v.drawnR * 0.01 then
 				resize(v, v.r)
 			end
 			local flags = s.flags
@@ -566,6 +634,11 @@ function Renderer.update(dt, t)
 					Looks.blink(v.look, shut)
 					v.blinkAt = now + (shut and 0.12 or 2.5 + math.random() * 3.5)
 				end
+				if v.chomp and v.chomp > 0 then
+					-- swallowing a germ: mouth wide open, eyes squeezed shut
+					v.chomp = math.max(0, v.chomp - dt * 3.5)
+					Looks.gulp(v.look, v.chomp)
+				end
 				if v.look.spin then
 					v.look.spin.Rotation = (t * 720) % 360
 				end
@@ -594,6 +667,44 @@ function Renderer.update(dt, t)
 				v.label.Text = text
 			end
 			place(v, parts, cframes, t)
+		end
+	end
+	-- swallowed cells fly into the eater and shrink; eaten food gets sucked in
+	for i = #dying, 1, -1 do
+		local d = dying[i]
+		local v = d.v
+		d.t += dt
+		local p = math.min(1, d.t / GULP_TIME)
+		local ev = d.eater and Renderer.cells[d.eater]
+		if ev and ev.x then
+			local f = math.min(1, dt * 16)
+			v.x += (ev.x - v.x) * f
+			v.z += (ev.z - v.z) * f
+		end
+		if p >= 1 then
+			v.model:Destroy()
+			table.remove(dying, i)
+		else
+			v.r = math.max(0.05, d.r * (1 - p))
+			resize(v, v.r)
+			place(v, parts, cframes, t)
+		end
+	end
+	for i = #sucking, 1, -1 do
+		local s = sucking[i]
+		s.t += dt
+		local p = math.min(1, s.t / SUCK_TIME)
+		local v = Renderer.cells[s.cell]
+		if p >= 1 or not v or not v.x then
+			hideFood(s.part)
+			table.remove(sucking, i)
+			if v then
+				v.pulse = math.max(v.pulse or 0, 0.35)
+			end
+		else
+			local e = p * p
+			s.part.Size = Vector3.one * math.max(0.05, s.d * (1 - p * 0.8))
+			s.part.CFrame = CFrame.new(s.x + (v.x - s.x) * e, s.y + (v.r - s.y) * e, s.z + (v.z - s.z) * e)
 		end
 	end
 	if #parts > 0 then

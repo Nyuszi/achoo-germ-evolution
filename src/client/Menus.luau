@@ -294,6 +294,25 @@ end
 
 local LOOK_TABS = { Body = true, Pattern = true, Eyes = true, Mouth = true, Hat = true, Flag = true, Colors = true, Outfits = true }
 
+-- Owns every flag in a continent (id) or in the world (id = nil)
+local function ownsFlags(continent)
+	for _, f in Flags.List do
+		if (not continent or f.Continent == continent) and not profile.Flags[f.Code] then
+			return false
+		end
+	end
+	return true
+end
+
+local function ownsBundle(b)
+	for cat, id in b.Items do
+		if not ownsSkin(cat, id) then
+			return false
+		end
+	end
+	return true
+end
+
 local function refreshEditor()
 	if not profile then
 		return
@@ -347,16 +366,18 @@ local function refreshEditor()
 		row(editor.list, nextN(), "No flag", profile.Skin.Flag == "" and "✓ on" or "", { { "Use", Ui.BLUE, function()
 			call("Editor", "Equip", "Flag", "")
 		end } }, "🏳️")
-		row(editor.list, nextN(), "🌍 World Pack", "Every flag on Earth", { { Config.WorldPackPrice .. " R$", Ui.GOLD, function()
+		local allFlags = ownsFlags(nil)
+		row(editor.list, nextN(), "🌍 World Pack" .. (allFlags and "  ✓" or ""), allFlags and "You own every flag" or "Every flag on Earth", { allFlags and { "Owned", Ui.GREY } or { Config.WorldPackPrice .. " R$", Ui.GOLD, function()
 			call("Shop", "BuyItem", { kind = "World" })
 		end } })
 		for _, c in Flags.Continents do
-			row(editor.list, nextN(), c.Name .. " pack", flagContinent == c.Id and "showing" or "tap Show to filter", {
+			local owned = ownsFlags(c.Id)
+			row(editor.list, nextN(), c.Name .. " pack" .. (owned and "  ✓" or ""), flagContinent == c.Id and "showing" or (owned and "owned · tap Show to filter" or "tap Show to filter"), {
 				{ "Show", flagContinent == c.Id and Ui.GOLD or Ui.BLUE, function()
 					flagContinent = flagContinent ~= c.Id and c.Id or nil
 					refreshEditor()
 				end },
-				{ Config.ContinentPackPrice .. " R$", Ui.GOLD, function()
+				owned and { "Owned", Ui.GREY } or { Config.ContinentPackPrice .. " R$", Ui.GOLD, function()
 					call("Shop", "BuyItem", { kind = "Continent", id = c.Id })
 				end },
 			})
@@ -394,7 +415,8 @@ local function refreshEditor()
 			for cat, id in b.Items do
 				table.insert(parts, id)
 			end
-			row(editor.list, nextN(), b.Name, table.concat(parts, ", "), { { b.Price .. " R$", Ui.GOLD, function()
+			local owned = ownsBundle(b)
+			row(editor.list, nextN(), b.Name .. (owned and "  ✓" or ""), table.concat(parts, ", "), { owned and { "Owned", Ui.GREY } or { b.Price .. " R$", Ui.GOLD, function()
 				call("Shop", "BuyItem", { kind = "Bundle", id = b.Id })
 			end } })
 		end
@@ -464,9 +486,11 @@ local function refreshShop()
 		local p = Config.GamePasses[id]
 		if p.Id ~= 0 or profile.Studio then
 			local owned = profile.Passes[id]
-			row(shop.list, nextN(), p.Name .. (owned and "  ✓" or ""), p.Text, { { owned and (profile.Studio and p.Id == 0 and "Turn off" or "Owned") or (p.Price .. " R$"), owned and Ui.GREY or Ui.GOLD, function()
+			-- owned passes can't be bought again (in Studio, a free test pass can be turned off)
+			local canToggle = profile.Studio and p.Id == 0
+			row(shop.list, nextN(), p.Name .. (owned and "  ✓" or ""), p.Text, { { owned and (canToggle and "Turn off" or "Owned") or (p.Price .. " R$"), owned and Ui.GREY or Ui.GOLD, (not owned or canToggle) and function()
 				call("Shop", "BuyPass", id)
-			end } })
+			end or nil } })
 		end
 	end
 	heading(shop.list, nextN(), "Items")

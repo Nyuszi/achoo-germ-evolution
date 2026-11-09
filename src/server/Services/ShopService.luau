@@ -83,6 +83,31 @@ function ShopService.ownsSkin(data, cat, id)
 	return item.Free == true or data.OwnedSkins[cat .. ":" .. id] == true
 end
 
+-- True when the player already has everything a pack or bundle would give (so it can't be bought again)
+function ShopService.ownsAll(data, spec)
+	if spec.kind == "Bundle" then
+		for _, b in Config.Bundles do
+			if b.Id == spec.id then
+				for cat, id in b.Items do
+					if not ShopService.ownsSkin(data, cat, id) then
+						return false
+					end
+				end
+				return true
+			end
+		end
+		return false
+	elseif spec.kind == "Continent" or spec.kind == "World" then
+		for _, f in Flags.List do
+			if (spec.kind == "World" or f.Continent == spec.id) and not data.Flags[f.Code] then
+				return false
+			end
+		end
+		return true
+	end
+	return false
+end
+
 -- What an item spec costs in Robux (nil if it cannot be bought with Robux)
 local function robuxPrice(spec)
 	if spec.kind == "Skin" then
@@ -318,6 +343,8 @@ function shopActions.BuyItem(player, data, spec)
 		end
 	elseif spec.kind == "Flag" and data.Flags[spec.id] then
 		return false, "You own this flag already"
+	elseif ShopService.ownsAll(data, spec) then
+		return false, "You own everything in this already"
 	end
 	local price = robuxPrice(spec)
 	if not price then

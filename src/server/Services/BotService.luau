@@ -272,7 +272,12 @@ local function think(germ, brain)
 			if preyD < myR * 2 + 6 and math.random() < 0.2 then
 				World.dash(germ)
 			end
-			if brain.behaviour == "Hunter" and mySize >= prey.size * Config.EatRatio * 2.1 and preyD < myR * 3 and math.random() < 0.1 then
+			local cellCount = 0
+			for _ in germ.cells do
+				cellCount += 1
+			end
+			-- bots split once at a time (players may split again and again)
+			if cellCount == 1 and brain.behaviour == "Hunter" and mySize >= prey.size * Config.EatRatio * 2.1 and preyD < myR * 3 and math.random() < 0.1 then
 				World.split(germ)
 			end
 			return

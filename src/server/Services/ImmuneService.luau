@@ -1,6 +1,6 @@
 -- The host fights back. Every host dish has:
 --   Whitey      a white blood cell that hunts germs in the inner zones (drains or swallows them)
---   Antibodies  little Y-shapes drifting in the inner zones: touching one slows you (+2 DNA)
+--   Antibodies  little Y-shapes drifting in the inner zones: bigger germs eat them, smaller ones get slowed
 --   Macrophage  a giant boss that shows up every few minutes and gulps germs; beat it together
 --   Fever       the host heats up: double food, double DNA, harder fights
 --   Medicine    the host takes medicine: the dish wall closes in for a minute

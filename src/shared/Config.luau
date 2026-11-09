@@ -77,7 +77,9 @@ Config.Hosts = {
 }
 
 Config.Hazards = {
-	Whiskers = { Every = 22, Duration = 5, Push = 55 }, -- a rotating sweep that knocks germs outward
+	-- a whisker sweeps once round the dish and knocks germs sideways. It shows up Warn seconds early;
+	-- a germ that is dashing goes straight through it.
+	Whiskers = { Every = 22, Warn = 2.5, Duration = 8, Push = 55 },
 	Drool = { Every = 25, Duration = 5, Push = 14 }, -- a current pushing everyone one way
 	Suction = { Every = 25, Duration = 5, Pull = 12 }, -- pull toward the middle
 	FireBurp = { Every = 25, Warn = 3, Duration = 5, DamagePerSecond = 0.05 }, -- zone 1 burns
@@ -102,6 +104,10 @@ Config.MaxSizeShare = 1.15 -- nobody grows past 115% of the sneeze size (go snee
 Config.EatRatio = 1.25 -- you can swallow a germ 25% smaller than you
 Config.EatOverlap = 0.4 -- the prey's centre must be this deep inside you (share of its radius)
 Config.EatKeepShare = 0.4 -- you gain 40% of a swallowed germ's size
+-- Big crumbs: a few chunky pellets in every zone, worth ValueMult normal pellets. You can only eat
+-- one once you are at least NeedMult times its value (drawn that big), so brand-new germs can't.
+-- RefillChance: chance per food refill (about once a second) that an eaten crumb grows back.
+Config.BigFood = { Share = 0.025, ValueMult = 10, NeedMult = 2.5, RefillChance = 0.15 }
 Config.BurstPellets = 8 -- the rest bursts into food pellets around you
 Config.RespawnShare = 0.5 -- eaten germs come back with 50% of their size
 Config.VaccineRespawnShare = 0.75 -- with the Vaccine pass
@@ -112,8 +118,8 @@ Config.FightDamagePerSecond = 0.03 -- share of the defender's size lost per seco
 Config.FightStealShare = 0.5 -- the attacker gains half of the damage dealt
 
 -- Moves -------------------------------------------------------------------------
-Config.Dash = { Cooldown = 4, Duration = 0.3, SpeedMult = 3, CostShare = 0.02, MinSize = 12 }
-Config.Split = { Cooldown = 10, MinSize = 40, MergeSeconds = 8, LaunchSpeed = 90, MaxCells = 2 }
+Config.Dash = { Cooldown = 4, Duration = 0.3, SpeedMult = 3, CostShare = 0.02, MinSize = 4 } -- MinSize below StartSize, so a new germ can dash
+Config.Split = { Cooldown = 1, MinSize = 40, MergeSeconds = 10, LaunchSpeed = 90, MaxCells = 8 } -- split again and again, up to 8 cells
 Config.Spit = { Cooldown = 6, CostShare = 0.01, Speed = 70, Life = 4, SlowMult = 0.6, SlowSeconds = 2 }
 
 -- Fairness ----------------------------------------------------------------------
@@ -231,7 +237,8 @@ Config.Immune = {
 		GulpEvery = 12, GulpReach = 1.4, GulpMaxShare = 0.35, RewardShare = 0.5, Lifetime = 240 },
 	PlayerDamage = 0.15, -- a touching germ deals 15% of its own size per second to a boss
 	MinContribution = 0.05, -- deal at least 5% of a boss's health to share the reward
-	Antibodies = { Count = 10, MinZone = 2, Speed = 10, SlowMult = 0.6, SlowSeconds = 3, Dna = 2 },
+	-- a germ bigger than an antibody eats it (EatShare of its size, Dna x EatDnaMult); smaller ones get slowed
+	Antibodies = { Count = 10, MinZone = 2, Speed = 10, SlowMult = 0.6, SlowSeconds = 3, Dna = 2, EatShare = 0.5, EatDnaMult = 5 },
 	Fever = { EverySeconds = 900, FirstAfter = 300, Duration = 90, FoodMult = 2, DamageMult = 1.5, DnaMult = 2 },
 	Medicine = { EverySeconds = 1200, FirstAfter = 600, Duration = 60, ShrinkTo = 0.55 },
 }

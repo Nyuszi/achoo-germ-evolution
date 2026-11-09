@@ -229,7 +229,10 @@ assert(Renderer.germView(101), "germView")
 assert(#Renderer.board(6) == 6, "board")
 Renderer.foodSync({ 1, 2400, 0, 1.2, 0, 2, 2401, 1, 3, 1 })
 Renderer.foodDelta({ 3, 2402, 0, 1, 0 }, { 1 })
-Renderer.removeCells({ 1101 })
+Renderer.foodDelta({}, { 2, 3 })
+Renderer.removeCells({ 1101, 1103 }, { ["1101"] = 1102 })
+for i = 1, 20 do Renderer.update(0.03, 2 + i * 0.03) end
+print("eat animations ok")
 -- effects
 for _, e in ipairs({
   { "Ink", { { x = 1, z = 2, r = 3 } } }, { "Warps", { { x = 1, z = 2, r = 3 }, { x = 1, z = 2, r = 3 } } }, { "Spikes", { { x = 1, z = 2, r = 3 } } },

@@ -138,13 +138,13 @@ function Fx.event(kind, data)
 			whisker.part:Destroy()
 		end
 		whisker = {
-			part = part({ Size = Vector3.new(data.length, 1.5, 3), Color = Color3.fromRGB(60, 40, 30) }),
-			start = os.clock(),
+			part = part({ Size = Vector3.new(data.length, 1.5, 3), Color = Color3.fromRGB(60, 40, 30), Transparency = 0.6 }),
+			start = os.clock() + (data.warn or 0), -- see-through and still during the warning
 			duration = data.duration,
 			angle = data.angle,
 			length = data.length,
 		}
-		Fx.banner("〰️ WHISKER SWEEP! Watch out for the big whisker")
+		Fx.banner("〰️ WHISKER SWEEP! It pushes germs away. DASH through it to dodge")
 	elseif kind == "Drool" then
 		Fx.banner("💧 DROOL WAVE! Everything slides one way")
 		clear("Flow")
@@ -193,7 +193,9 @@ function Fx.update(dt, camHeight)
 			whisker.part:Destroy()
 			whisker = nil
 		else
-			local a = whisker.angle + p * math.pi * 2
+			-- warning: blinks in place; then solid and sweeping
+			whisker.part.Transparency = p < 0 and (0.45 + math.abs(math.sin(os.clock() * 8)) * 0.4) or 0
+			local a = whisker.angle + math.max(0, p) * math.pi * 2
 			local half = whisker.length / 2
 			whisker.part.CFrame = CFrame.new(dish.cx + math.cos(a) * half, 1.5, dish.cz + math.sin(a) * half) * CFrame.Angles(0, -a, 0)
 		end

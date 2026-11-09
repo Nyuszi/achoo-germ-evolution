@@ -56,10 +56,10 @@ function HazardService.trigger(dish)
 	local now = World.now()
 	local t = dish.timers
 	if kind == "Whiskers" then
-		t.whiskerFrom = now
+		t.whiskerFrom = now + H.Whiskers.Warn -- it shows first, then sweeps
 		t.whiskerAngle = math.random() * math.pi * 2
 		t.whiskerId = (t.whiskerId or 0) + 1
-		fx(dish, "Whiskers", { duration = H.Whiskers.Duration, angle = t.whiskerAngle, length = dish.layout.radius })
+		fx(dish, "Whiskers", { duration = H.Whiskers.Duration, warn = H.Whiskers.Warn, angle = t.whiskerAngle, length = dish.layout.radius })
 	elseif kind == "Drool" then
 		local a = math.random() * math.pi * 2
 		dish.effects.pushX, dish.effects.pushZ = math.cos(a) * H.Drool.Push, math.sin(a) * H.Drool.Push
@@ -124,6 +124,9 @@ function HazardService.start()
 			return
 		end
 		local p = (now - t.whiskerFrom) / H.Whiskers.Duration
+		if p < 0 then
+			return -- still the warning
+		end
 		if p >= 1 then
 			t.whiskerFrom = nil
 			return
@@ -131,7 +134,8 @@ function HazardService.start()
 		local angle = t.whiskerAngle + p * math.pi * 2
 		local ax, az = math.cos(angle), math.sin(angle)
 		for _, cell in dish.cells do
-			if not cell.germ.npc and cell.whisker ~= t.whiskerId then
+			-- a dashing germ goes straight through the whisker
+			if not cell.germ.npc and cell.whisker ~= t.whiskerId and now >= cell.germ.dashUntil then
 				-- distance from the whisker line (a ray from the centre)
 				local along = cell.x * ax + cell.z * az
 				local across = math.abs(-cell.x * az + cell.z * ax)

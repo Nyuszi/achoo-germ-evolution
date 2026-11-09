@@ -602,6 +602,7 @@ function Looks.build(root, look)
 		g.Size = UDim2.fromScale(MOUTH_SCALE, MOUTH_SCALE)
 		g.Position = UDim2.fromScale(0.5, 0.64 - (0.63 - 0.5) * MOUTH_SCALE)
 		mouth(g)
+		handles.mouth = g
 	end
 	local hat = HATS[skin.Hat or "None"]
 	if hat then
@@ -627,6 +628,16 @@ function Looks.aim(handles, dx, dz, t)
 		dz += math.cos(t * 7) * 0.35
 	end
 	handles.look.Position = UDim2.fromScale(0.5 + dx * k, 0.5 + dz * k)
+end
+
+-- Swallowing: k goes from 1 to 0. The mouth opens wide, the eyes squeeze shut, then back to normal.
+function Looks.gulp(handles, k)
+	if handles.mouth then
+		local s = MOUTH_SCALE * (1 + 0.9 * math.sin(k * math.pi))
+		handles.mouth.Size = UDim2.fromScale(s, s)
+		handles.mouth.Position = UDim2.fromScale(0.5, 0.64 - (0.63 - 0.5) * s)
+	end
+	Looks.blink(handles, k > 0.3)
 end
 
 function Looks.blink(handles, shut)

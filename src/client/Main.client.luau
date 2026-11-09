@@ -80,6 +80,7 @@ Remotes.Profile.OnClientEvent:Connect(function(profile)
 		local tips = {
 			touch and "👆 Hold your finger where you want to swim" or "🖱️ Your germ swims toward the mouse (or use WASD)",
 			"🍬 Eat the glowing food and germs smaller than you to grow",
+			"🍪 Big crumbs are worth a lot, but you must be bigger than one to eat it",
 			"⚠️ Germs 25% bigger than you can swallow you!",
 			touch and "💨 DASH to escape, SPLIT to catch prey" or "💨 Shift = dash, Space = split",
 			"🤧 Grow to the sneeze size and touch the Sneeze Nerve in the middle!",
@@ -259,12 +260,13 @@ end)
 
 -- Move keys
 local function bind(name, action, ...)
-	ContextActionService:BindAction(name, function(_, state)
+	-- high priority, so Roblox's own Shift bindings (shift lock) can't swallow the dash key
+	ContextActionService:BindActionAtPriority(name, function(_, state)
 		if state == Enum.UserInputState.Begin and not UserInputService:GetFocusedTextBox() then
 			Remotes.Action:FireServer(action)
 		end
 		return Enum.ContextActionResult.Pass
-	end, false, ...)
+	end, false, Enum.ContextActionPriority.High.Value, ...)
 end
 bind("GermDash", "Dash", Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonR2)
 bind("GermSplit", "Split", Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
