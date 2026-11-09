@@ -160,6 +160,7 @@ end
 
 local WHITE, BLACK = Color3.new(1, 1, 1), Color3.fromRGB(25, 25, 35)
 local LOOK_PAD = 2 -- the look billboard is this much bigger than the body, so hats fit
+local FLAG_BOX = 100 -- pixels: the flag emoji's box before it is scaled up to the body
 
 local function skinItem(cat, id)
 	for _, item in Config.Skins[cat] or {} do
@@ -291,24 +292,27 @@ local function buildVisual(cellId)
 	end
 	v.shield = add(newPart(Enum.PartType.Ball, Color3.fromRGB(150, 220, 255), Enum.Material.ForceField, 1))
 
-	-- trail
+	-- trail: a flat ribbon lying behind the germ (the body faces its movement, so the back is
+	-- local +Z). Its two ends sit at the back edge, one each side, so it is as wide as the germ.
 	local trail = skin.Trail or "None"
 	if TRAIL_COLORS[trail] then
 		local a0 = Instance.new("Attachment")
-		a0.Position = Vector3.new(0, 0.5, 0)
 		a0.Parent = v.body
 		local a1 = Instance.new("Attachment")
-		a1.Position = Vector3.new(0, -0.5, 0)
 		a1.Parent = v.body
 		local t = Instance.new("Trail")
 		t.Attachment0, t.Attachment1 = a0, a1
 		t.Color = ColorSequence.new(TRAIL_COLORS[trail][1], TRAIL_COLORS[trail][2])
-		t.Transparency = NumberSequence.new(0.2, 1)
-		t.Lifetime = 0.6
-		t.LightEmission = 0.6
-		t.FaceCamera = true
+		t.Transparency = NumberSequence.new(0.05, 1)
+		t.WidthScale = NumberSequence.new(1, 0.25)
+		t.Lifetime = 0.7
+		t.MinLength = 0
+		t.LightEmission = 1
+		t.LightInfluence = 0 -- same colour on every floor
+		t.Brightness = 2
+		t.FaceCamera = false
 		t.Parent = v.body
-		v.trail = { a0 = a0, a1 = a1 }
+		v.trail = { a0 = a0, a1 = a1, t = t }
 	end
 
 	-- name tag (and flag)
@@ -359,13 +363,21 @@ local function buildVisual(cellId)
 			local c = Instance.new("UICorner")
 			c.CornerRadius = UDim.new(0.5, 0)
 			c.Parent = round
+			-- Roblox stops growing scaled text at 100 px, so a big germ only got a small flag.
+			-- The emoji is drawn in a fixed 100 px box instead and a UIScale blows it up to
+			-- 2.1x the disc every frame (see FLAG_BOX in Renderer.update).
 			local f = Instance.new("TextLabel")
-			f.Size = UDim2.fromScale(2.1, 2.1)
-			f.Position = UDim2.fromScale(-0.55, -0.55)
+			f.AnchorPoint = Vector2.new(0.5, 0.5)
+			f.Position = UDim2.fromScale(0.5, 0.5)
+			f.Size = UDim2.fromOffset(FLAG_BOX, FLAG_BOX)
 			f.BackgroundTransparency = 1
 			f.TextScaled = true
 			f.Text = Flags.emoji(skin.Flag)
 			f.Parent = round
+			local grow = Instance.new("UIScale")
+			grow.Scale = 1
+			grow.Parent = f
+			v.flagScale = grow
 		end
 		local lookSkin = skin
 		if npc then
@@ -402,8 +414,10 @@ local function resize(v, r)
 		v.lookGui.StudsOffsetWorldSpace = Vector3.new(0, r * 1.03, 0) -- just above the top of the body
 	end
 	if v.trail then
-		v.trail.a0.Position = Vector3.new(0, 0, r * 0.8)
-		v.trail.a1.Position = Vector3.new(0, 0, -r * 0.8)
+		-- just outside the back of the ball, half way up (above any floor bumps)
+		v.trail.a0.Position = Vector3.new(-r * 0.5, 0, r * 0.9)
+		v.trail.a1.Position = Vector3.new(r * 0.5, 0, r * 0.9)
+		v.trail.t.Lifetime = math.clamp(0.5 + r * 0.03, 0.5, 2.5) -- big germs are slow: a longer tail
 	end
 	v.drawnR = r
 end
@@ -638,6 +652,14 @@ function Renderer.update(dt, t)
 					-- swallowing a germ: mouth wide open, eyes squeezed shut
 					v.chomp = math.max(0, v.chomp - dt * 3.5)
 					Looks.gulp(v.look, v.chomp)
+				end
+				if v.flagScale then
+					-- keep the flag covering the whole body however big it is on screen
+					local px = v.lookGui.AbsoluteSize.X / LOOK_PAD
+					local want = math.max(0.01, px * 2.1 / FLAG_BOX)
+					if math.abs(v.flagScale.Scale - want) > want * 0.01 then
+						v.flagScale.Scale = want
+					end
 				end
 				if v.look.spin then
 					v.look.spin.Rotation = (t * 720) % 360
