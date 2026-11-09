@@ -196,6 +196,33 @@ while SIMTIME < total do
     print(string.format("t=%3dmin dishes=%d germs=%d host=%d size=%s dna=%d kills=%d deaths=%d mode=%s floor=%s", math.floor(SIMTIME / 60 + 0.5), nd, ng, data.Host,
       Formulas.formatNumber(germ and germ.alive and World.germSize(germ) or 0), data.Dna, data.Kills, data.Deaths, tostring(germ and germ.mode), tostring(germ and germ.arenaFloor)))
   end
+  -- EXERCISE=1: press every Dev, Shop, Editor, Lab, Quests and Arena action once, 3 s apart
+  if EXERCISE and SIMTIME >= 20 and SIMTIME >= (nextExercise or 0) then
+    nextExercise = SIMTIME + 3
+    exerciseI = (exerciseI or 0) + 1
+    local list = {
+      { "Dev", "Dna" }, { "Dev", "MaxLab" }, { "Lab", "Fuse", "BlackHole" }, { "Lab", "Fuse", "Fortress" }, { "Lab", "Equip", "Fortress" }, { "Lab", "Equip", "Drill" },
+      { "Lab", "SaveLoadout", 1 }, { "Lab", "LoadLoadout", 1 }, { "Lab", "Core", "Rod" }, { "Dev", "GermPoints" }, { "Lab", "Skill", "Starter" },
+      { "Shop", "BuyPass", "DoubleDna" }, { "Shop", "BuyPass", "VIP" }, { "Shop", "BuyProduct", "GrowthPotion" }, { "Shop", "UsePotion" }, { "Shop", "BuyProduct", "DnaLarge" },
+      { "Shop", "BuyProduct", "ServerFever" }, { "Shop", "BuyProduct", "ImmuneStrike" }, { "Shop", "BuyItem", { kind = "Skin", cat = "Body", id = "Lava" } },
+      { "Shop", "BuyItem", { kind = "Skin", cat = "Pattern", id = "Spots", dna = true } }, { "Shop", "BuyItem", { kind = "Flag", id = "HU" } },
+      { "Shop", "BuyItem", { kind = "Continent", id = "Europe" } }, { "Shop", "BuyItem", { kind = "World" } }, { "Shop", "BuyItem", { kind = "Bundle", id = "DragonGerm" } },
+      { "Editor", "Equip", "Flag", "JP" }, { "Editor", "Color", "Color", { 255, 0, 10 } }, { "Editor", "SaveOutfit", 3 }, { "Editor", "LoadOutfit", 3 },
+      { "Dev", "Hazard" }, { "Dev", "Whitey" }, { "Dev", "Macrophage" }, { "Dev", "Fever" }, { "Dev", "Medicine" }, { "Dev", "Golden" }, { "Dev", "EndQuarantine" },
+      { "Dev", "CompleteQuests" }, { "Quests", "Claim", 1 }, { "Quests", "Redeem", "achoo" }, { "Quests", "ClaimWeekly" }, { "Quests", "ClaimSet", "Hosts" },
+      { "Dev", "Grow" }, { "Dev", "SneezeSize" }, { "Dev", "NextHost" }, { "Dev", "Host", 4 }, { "Dev", "Hazard" }, { "Dev", "Host", 5 }, { "Dev", "Hazard" },
+      { "Dev", "Host", 6 }, { "Dev", "Hazard" }, { "Dev", "Host", 3 }, { "Dev", "Hazard" }, { "Dev", "Host", 2 }, { "Dev", "Hazard" },
+      { "Arena", "Enter" }, { "Dev", "Mutant" }, { "Arena", "Enter" }, { "Dev", "SneezeSize" }, { "Dev", "Tokens" }, { "Arena", "Buy", 1 }, { "Dev", "ArenaFloor" },
+      { "Dev", "ArenaFloor" }, { "Dev", "ArenaFloor" }, { "Dev", "SneezeSize" }, { "Arena", "Leave" }, { "Dev", "Reset" },
+    }
+    local c = list[exerciseI]
+    if c then
+      local args = {}
+      for i = 2, #c do args[i - 1] = type(c[i]) == "table" and "{...}" or tostring(c[i]) end
+      local ok, msg = NET[c[1]].OnServerInvoke(p, table.unpack(c, 2))
+      print(string.format("%5.1fs  %s %s -> %s %s", SIMTIME, c[1], table.concat(args, " "), tostring(ok), tostring(msg)))
+    end
+  end
   if TESTARENA and SIMTIME >= TESTARENA and not ARENADONE then
     ARENADONE = true
     call("Dev", "Mutant")
@@ -208,7 +235,7 @@ for i = math.max(1, #log - 40), #log do print(log[i]) end
 `;
 
 const services = ["Net", "Bus", "DataService", "World", "MapBuilder", "DishService", "HazardService", "ImmuneService", "BotService", "PlayerService", "LabService", "ShopService", "ArenaService", "QuestService", "DevService", "FeedbackService"];
-let code = prelude + `TESTARENA = ${process.env.ARENA_AT ? Number(process.env.ARENA_AT) * 60 : "nil"}\n`;
+let code = prelude + `EXERCISE = ${process.env.EXERCISE ? 'true' : 'false'}\nTESTARENA = ${process.env.ARENA_AT ? Number(process.env.ARENA_AT) * 60 : "nil"}\n`;
 for (const n of ["Config", "Formulas", "Names", "Stats", "Flags"]) code += wrap(n, read(`shared/${n}.luau`));
 for (const n of services) if (n !== "Net" && n !== "MapBuilder") code += wrap(n, read(`server/Services/${n}.luau`));
 code += wrap("Main", read("server/Main.server.luau").replace(/script\.Parent\.Services/g, "script.Parent"));

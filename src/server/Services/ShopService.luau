@@ -375,6 +375,11 @@ function editorActions.SaveOutfit(player, data, n)
 	if type(n) ~= "number" or n < 1 or n > Config.OutfitSlots then
 		return false
 	end
+	for i = 1, n - 1 do
+		if data.Outfits[i] == nil then
+			data.Outfits[i] = false -- keep the list without holes so it saves
+		end
+	end
 	data.Outfits[n] = table.clone(data.Skin)
 	return true, "Outfit " .. n .. " saved"
 end

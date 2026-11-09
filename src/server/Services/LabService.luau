@@ -147,6 +147,11 @@ function actions.SaveLoadout(player, data, n)
 	if type(n) ~= "number" or n < 1 or n > max then
 		return false, "Get the Extra Loadouts pass for 3 builds"
 	end
+	for i = 1, n - 1 do
+		if data.Loadouts[i] == nil then
+			data.Loadouts[i] = false -- keep the list without holes so it saves
+		end
+	end
 	data.Loadouts[n] = table.clone(data.Equipped)
 	return true, "Build " .. n .. " saved"
 end
