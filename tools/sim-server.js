@@ -241,6 +241,7 @@ while SIMTIME < total do
     local nd, ng = 0, 0
     for _, d in pairs(World.dishes()) do nd = nd + 1 end
     for _, g in pairs(World.allGerms()) do if g.alive then ng = ng + 1 end end
+    if germ and germ.dish and germ.dish.modifiers and #germ.dish.modifiers > 0 then print("  modifiers: " .. table.concat(germ.dish.modifiers, ", ") .. " wall=" .. math.floor(germ.dish.wall) .. " poison=" .. tostring(World.hasEffect(germ, "Poison")) .. " rate=" .. tostring(germ.poisonRate)) end
     print(string.format("t=%3dmin dishes=%d germs=%d host=%d size=%s dna=%d kills=%d deaths=%d mode=%s floor=%s", math.floor(SIMTIME / 60 + 0.5), nd, ng, data.Host,
       Formulas.formatNumber(germ and germ.alive and World.germSize(germ) or 0), data.Dna, data.Kills, data.Deaths, tostring(germ and germ.mode), tostring(germ and germ.arenaFloor)))
   end
