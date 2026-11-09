@@ -151,8 +151,8 @@ local germs, cells = {}, {}
 local id = 100
 local function germ(skin, muts, npc, core)
   id = id + 1
-  germs[id] = { name = "G" .. id, color = Color3.fromRGB(100, 200, 100), muts = muts or {}, skin = skin, npc = npc, core = core or "Blob", vip = true }
-  cells[id + 1000] = id
+  germs[tostring(id)] = { name = "G" .. id, color = Color3.fromRGB(100, 200, 100), muts = muts or {}, skin = skin, npc = npc, core = core or "Blob", vip = true }
+  cells[tostring(id + 1000)] = id
 end
 for _, cat in ipairs({ "Body", "Pattern", "Eyes", "Mouth", "Hat", "Trail" }) do
   for _, item in ipairs(Config.Skins[cat]) do
@@ -171,7 +171,8 @@ for _ in pairs(cells) do count = count + 1 end
 local buf = buffer.create(8 + count * 17)
 buffer.writef32(buf, 0, 1) buffer.writeu32(buf, 4, 7)
 local o = 8
-for cid in pairs(cells) do
+for cidKey in pairs(cells) do
+  local cid = tonumber(cidKey)
   buffer.writeu32(buf, o, cid) buffer.writef32(buf, o + 4, 2400 + cid % 50) buffer.writef32(buf, o + 8, 3) buffer.writef32(buf, o + 12, 50) buffer.writeu8(buf, o + 16, 127)
   o = o + 17
 end

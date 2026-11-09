@@ -489,7 +489,9 @@ function Renderer.scale()
 end
 
 function Renderer.applyInfo(payload)
-	for germId, info in payload.germs do
+	-- ids arrive as string keys (see World.wireInfo)
+	for key, info in payload.germs do
+		local germId = tonumber(key)
 		Renderer.germInfo[germId] = info
 		-- rebuild visuals of this germ's cells so new mutations and skins show
 		for cellId, gid in Renderer.cellGerm do
@@ -499,8 +501,8 @@ function Renderer.applyInfo(payload)
 			end
 		end
 	end
-	for cellId, germId in payload.cells do
-		Renderer.cellGerm[cellId] = germId
+	for key, germId in payload.cells do
+		Renderer.cellGerm[tonumber(key)] = germId
 	end
 end
 

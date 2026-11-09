@@ -1039,7 +1039,7 @@ local function sendSnapshot(dish)
 		offset += 17
 	end
 	if dish.infoDirty then
-		fireDish(dish, Net.CellInfo, dish.info)
+		fireDish(dish, Net.CellInfo, World.wireInfo(dish.info))
 		dish.info = { cells = {}, germs = {} }
 		dish.infoDirty = false
 	end
@@ -1054,6 +1054,18 @@ local function sendSnapshot(dish)
 	fireDish(dish, Net.Snapshot, buf)
 end
 
+-- Remotes lose tables with gaps in their number keys, so ids travel as string keys.
+function World.wireInfo(info)
+	local out = { cells = {}, germs = {} }
+	for id, germId in info.cells do
+		out.cells[tostring(id)] = germId
+	end
+	for id, g in info.germs do
+		out.germs[tostring(id)] = g
+	end
+	return out
+end
+
 -- Everything a player needs to draw a dish (on joining it).
 function World.fullState(dish)
 	local info = { cells = {}, germs = {} }
@@ -1061,7 +1073,7 @@ function World.fullState(dish)
 		info.germs[cell.germ.id] = World.germInfo(cell.germ)
 		info.cells[cell.id] = cell.germ.id
 	end
-	return info, World.foodList(dish)
+	return World.wireInfo(info), World.foodList(dish)
 end
 
 -- The tick -------------------------------------------------------------------------------------------
