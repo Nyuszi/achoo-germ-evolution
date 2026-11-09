@@ -2,6 +2,7 @@
   "name": "achoo-germ-evolution-tools",
   "private": true,
   "scripts": {
+    "menus": "node tools/render-menus.js menu-previews",
     "test": "node tools/test-formulas.js",
     "check": "node tools/check-syntax.js && node tools/lint-globals.js",
     "smoke": "node tools/client-smoke.js",

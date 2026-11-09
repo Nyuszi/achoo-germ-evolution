@@ -10,11 +10,19 @@ const read = (p) => fs.readFileSync(path.join(src, p), "utf8");
 function toLua(code) {
 	code = code.replace(/^(\s*)([\w.\[\]"':]+)\s*(\+|-|\*|\/|\.\.)=\s*(.+?)(\s*--.*)?$/gm, (_, ws, lhs, op, rhs) => `${ws}${lhs} = ${lhs} ${op} (${rhs})`);
 	code = code.replace(/^(\s*)continue\b/gm, "$1goto continue");
-	code = code.replace(/^(\s*for\b[^\n]*?\bin\s+)(?!pairs\(|ipairs\(|next\b|string\.gmatch)([^\n]+?)\s+do\b/gm, "$1pairs($2) do");
+	code = code.replace(/^(\s*for\b[^\n]*?\bin\s+)(?!pairs\(|ipairs\(|next\b|string\.gmatch)([^\n]+?)\s+do\b/gm, "$1__iter($2) do");
 	return code;
 }
 const prelude = `
 local modules, loaded = {}, {}
+-- Luau iterates arrays in order; fengari's pairs may not, so loops go through this
+function __iter(t)
+  local keys, n = {}, #t
+  for i = 1, n do keys[i] = i end
+  for k in pairs(t) do if not (type(k) == "number" and k >= 1 and k <= n and k % 1 == 0) then keys[#keys + 1] = k end end
+  local i = 0
+  return function() i = i + 1 local k = keys[i] if k ~= nil then return k, t[k] end end
+end
 function __define(name, fn) modules[name] = fn end
 function require(m)
   if type(m) == "table" then m = m.__name end
@@ -50,7 +58,7 @@ function C3.Lerp(a, b, t) return a end
 local function c3(r, g, b) return setmetatable({ R = r, G = g, B = b }, C3) end
 Color3 = { new = c3, fromRGB = function(r, g, b) return c3(r / 255, g / 255, b / 255) end }
 UDim = { new = function(a, b) return { Scale = a, Offset = b } end }
-UDim2 = { new = function(...) return { ... } end, fromScale = function(...) return { ... } end, fromOffset = function(...) return { ... } end }
+UDim2 = { new = function(a, b, c, d) return { a or 0, b or 0, c or 0, d or 0 } end, fromScale = function(a, b) return { a, 0, b, 0 } end, fromOffset = function(a, b) return { 0, a, 0, b } end }
 ColorSequence = { new = function() return {} end }
 NumberSequence = { new = function() return {} end }
 TweenInfo = { new = function() return {} end }
@@ -72,6 +80,8 @@ Inst.__index = function(self, k)
   local m = rawget(Inst, k)
   if m then return m end
   if EVENTS[k] then local s = signal() rawset(self, k, s) return s end
+  if k == "AbsolutePosition" then return { X = 0, Y = 0 } end
+  if k == "AbsoluteSize" then return { X = 170, Y = 170 } end
   return nil
 end
 Inst.__newindex = function(self, k, v)
@@ -100,7 +110,7 @@ Instance = { new = Inst.new }
 CALLS = {}
 local Remotes = Inst.new("Folder")
 local remoteMt = { __index = function(t, k)
-  local r = { OnClientEvent = signal(), FireServer = noop, InvokeServer = function(self, ...) local a = {} for i, v in ipairs({ ... }) do a[i] = tostring(v) end table.insert(CALLS, k .. " " .. table.concat(a, " ")) if k == "Leaders" then return { { name = "A", value = 5 } } end return true, "ok" end }
+  local r = { OnClientEvent = signal(), FireServer = noop, InvokeServer = function(self, ...) local a = {} for i, v in ipairs({ ... }) do a[i] = tostring(v) end table.insert(CALLS, k .. " " .. table.concat(a, " ")) if k == "Leaders" then return { { name = "SneezeQueen", value = 412 }, { name = "Laszlo", value = 377 }, { name = "GermLord99", value = 250 }, { name = "Bubbles", value = 198 }, { name = "TinyTerror", value = 120 } } end return true, "ok" end }
   rawset(t, k, r)
   return r
 end }
@@ -217,6 +227,11 @@ Hud.board(Renderer.board(6), 101)
 Hud.map(2400, 3, Renderer.markers())
 Hud.radar({ { x = 2500, z = 10, d = 3, kind = "prey" }, { x = 2300, z = 10, d = 3, kind = "danger" } }, 2400, 3)
 Hud.radar(nil, nil, nil)
+Hud.setStick(true)
+assert(Hud.onStick(85, 85) and not Hud.onStick(400, 85), "stick hit test")
+local sx, sz = Hud.stickMove(400, 85)
+assert(math.abs(sx - 1) < 1e-6 and math.abs(sz) < 1e-6, "stick clamp")
+Hud.stickMove(nil)
 print("hud ok")
 -- menus with a profile
 local profile = { Dna = 99999, Levels = { Jaws = 5, Suction = 5, Spikes = 2 }, Fusions = { BlackHole = true }, Equipped = { Front = "BlackHole", Sides = "Spikes" }, Loadouts = { { Front = "Jaws" } },
@@ -227,6 +242,11 @@ local profile = { Dna = 99999, Levels = { Jaws = 5, Suction = 5, Spikes = 2 }, F
   Streak = { Day = 1, Count = 3 }, Cards = { Whitey = true }, CardSetsClaimed = {}, ArenaBest = 4, ArenaBestEver = 12, ArenaFloor = 10, Tokens = 50, Mutant = 1, Sneezes = 7, Kills = 3, BestSize = 9,
   IsDev = true, Studio = true, Season = 1, SeasonLeft = 100000, ArenaUnlocked = true, Rank = "Cough" }
 Menus.setProfile(profile)
+if MENU_SHOTS then
+  state.mode = "host" state.nextGate = { name = "Sneeze", size = 25000 } state.size = 9000 Hud.sync(state) Hud.setStick(true)
+  __MENU_DUMP__
+  return
+end
 for name, p in pairs(Ui.panels) do
   Ui.open(name)
   local tabs = { "Mutations", "Fusions", "Cores", "Skills", "Builds", "Body", "Pattern", "Eyes", "Mouth", "Hat", "Trail", "Sneeze", "Flag", "Colors", "Outfits", "Daily", "Cards" }
@@ -249,10 +269,15 @@ print("CLIENT SMOKE OK")
 let code = prelude;
 for (const n of ["Config", "Formulas", "Flags", "Names"]) code += wrap(n, read(`shared/${n}.luau`));
 for (const n of ["Ui", "Renderer", "Fx", "Hud", "Menus"]) code += wrap(n, read(`client/${n}.luau`));
-code += run;
+let runCode = run;
+if (process.env.MENU_DUMP) {
+  runCode = `MENU_SHOTS = ${process.env.MENU_DUMP}\n` + run.replace("__MENU_DUMP__", fs.readFileSync(path.join(__dirname, "menu-dump.lua"), "utf8"));
+} else runCode = run.replace("__MENU_DUMP__", "");
+code += runCode;
 if (process.env.SMOKE_CODE) fs.writeFileSync(process.env.SMOKE_CODE, code);
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
 if (lauxlib.luaL_loadstring(L, to_luastring(code)) !== lua.LUA_OK) { console.error(lua.lua_tojsstring(L, -1)); process.exit(1); }
 lua.lua_getglobal(L, to_luastring("debug")); lua.lua_getfield(L, -1, to_luastring("traceback")); lua.lua_remove(L, -2); lua.lua_insert(L, 1);
 if (lua.lua_pcall(L, 0, 0, 1) !== lua.LUA_OK) { console.error(lua.lua_tojsstring(L, -1)); process.exit(1); }
+if (process.env.MENU_DUMP) { lua.lua_getglobal(L, to_luastring("MENU_JSON")); fs.writeFileSync(process.env.MENU_OUT, lua.lua_tojsstring(L, -1)); }

@@ -132,6 +132,7 @@ end)
 -- Steering -------------------------------------------------------------------------------------
 local steerX, steerZ = nil, nil
 local touchPos = nil -- the finger currently steering
+local usingKeys = false -- steering with keys or the stick (stop when they let go)
 
 local function screenToWorld(x, y)
 	local ray = camera:ViewportPointToRay(x, y)
@@ -143,15 +144,33 @@ local function screenToWorld(x, y)
 	return p.X, p.Z
 end
 
-UserInputService.TouchStarted:Connect(function(input, processed)
-	if processed or Hud.isOverUi(input.Position.X, input.Position.Y) then
+local stickInput = nil -- the finger on the thumbstick
+local stickX, stickZ = 0, 0
+
+UserInputService.TouchStarted:Connect(function(input)
+	if not stickInput and Hud.onStick(input.Position.X, input.Position.Y) then
+		stickInput = input
+		stickX, stickZ = Hud.stickMove(input.Position.X, input.Position.Y)
+		return
+	end
+	if Hud.isOverUi(input.Position.X, input.Position.Y) then
 		return
 	end
 	touchPos = input
 end)
+UserInputService.TouchMoved:Connect(function(input)
+	if input == stickInput then
+		stickX, stickZ = Hud.stickMove(input.Position.X, input.Position.Y)
+	end
+end)
 UserInputService.TouchEnded:Connect(function(input)
 	if touchPos == input then
 		touchPos = nil
+	end
+	if input == stickInput then
+		stickInput = nil
+		stickX, stickZ = Hud.stickMove(nil)
+		usingKeys = true -- let go: stop where we are (same as releasing WASD)
 	end
 end)
 
@@ -161,7 +180,6 @@ local KEYS = {
 	[Enum.KeyCode.A] = { -1, 0 }, [Enum.KeyCode.Left] = { -1, 0 },
 	[Enum.KeyCode.D] = { 1, 0 }, [Enum.KeyCode.Right] = { 1, 0 },
 }
-local usingKeys = false
 
 local function updateSteer(cx, cz, radius)
 	if UserInputService:GetFocusedTextBox() then
@@ -178,6 +196,18 @@ local function updateSteer(cx, cz, radius)
 		usingKeys = true
 		local len = math.sqrt(kx * kx + kz * kz)
 		steerX, steerZ = cx + kx / len * (radius + 60), cz + kz / len * (radius + 60)
+		return
+	end
+	if stickInput then
+		usingKeys = true
+		local push = math.sqrt(stickX * stickX + stickZ * stickZ)
+		if push < 0.2 then
+			steerX, steerZ = cx, cz -- dead zone: stay put
+		else
+			-- the target sits closer for a light push, so the germ swims slower
+			local reach = radius * math.min(1, push * 1.2) + 60 * push
+			steerX, steerZ = cx + stickX / push * reach, cz + stickZ / push * reach
+		end
 		return
 	end
 	if touchPos then

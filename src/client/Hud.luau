@@ -248,6 +248,63 @@ local splitButton = moveButton("SPLIT", 130, 76, "Split", Color3.fromRGB(255, 14
 local frontButton = moveButton("Q", 0, 14, "Front", Color3.fromRGB(150, 90, 220))
 local specialButton = moveButton("R", 130, 14, "Special", Color3.fromRGB(220, 80, 150))
 
+-- Thumbstick (phones, bottom left next to the menu bar) ----------------------------------------
+-- Drag inside the ring to swim; tapping anywhere else on the screen still steers too.
+local STICK = 170
+local stick = make("Frame", {
+	Name = "Stick",
+	Size = UDim2.fromOffset(STICK, STICK),
+	Position = UDim2.new(0, 135, 1, -STICK - 20),
+	BackgroundColor3 = Color3.fromRGB(30, 20, 40),
+	BackgroundTransparency = 0.5,
+	Visible = UserInputService.TouchEnabled,
+	Parent = gui,
+}, { corner(STICK / 2), Ui.stroke(3) })
+local knob = make("Frame", {
+	Size = UDim2.fromOffset(74, 74),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+	BackgroundTransparency = 0.2,
+	ZIndex = 2,
+	Parent = stick,
+}, { corner(37), Ui.stroke(3) })
+
+local function stickCentre()
+	local p, s = stick.AbsolutePosition, stick.AbsoluteSize
+	return p.X + s.X / 2, p.Y + s.Y / 2, s.X / 2
+end
+
+-- Is this touch (GUI coordinates) on the stick? A little margin makes it easy to grab.
+function Hud.onStick(x, y)
+	if not stick.Visible then
+		return false
+	end
+	local cx, cy, r = stickCentre()
+	local dx, dy = x - cx, y - cy
+	return dx * dx + dy * dy <= (r * 1.25) * (r * 1.25)
+end
+
+-- Move the knob to a touch point; returns the push as dx, dy in -1..1 (nil x lets go).
+function Hud.stickMove(x, y)
+	if not x then
+		knob.Position = UDim2.fromScale(0.5, 0.5)
+		return 0, 0
+	end
+	local cx, cy, r = stickCentre()
+	local dx, dy = (x - cx) / r, (y - cy) / r
+	local len = math.sqrt(dx * dx + dy * dy)
+	if len > 1 then
+		dx, dy = dx / len, dy / len
+	end
+	knob.Position = UDim2.fromScale(0.5 + dx * 0.5, 0.5 + dy * 0.5)
+	return dx, dy
+end
+
+function Hud.setStick(on)
+	stick.Visible = on
+end
+
 local ACTIVE_NAMES = { Chomp = "Chomp", Vacuum = "Vacuum", Pierce = "Pierce", Ghost = "Ghost", GravityWell = "Gravity", Blast = "Blast" }
 
 local function cooldownText(base, keys, seconds)

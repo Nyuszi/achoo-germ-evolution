@@ -259,7 +259,7 @@ local function refreshEditor()
 		end } })
 		for _, c in Flags.Continents do
 			row(editor.list, nextN(), c.Name .. " pack", flagContinent == c.Id and "showing" or "tap Show to filter", {
-				{ "Show", flagContinent == c.Id and Ui.GOLD or Ui.ROW, function()
+				{ "Show", flagContinent == c.Id and Ui.GOLD or Ui.BLUE, function()
 					flagContinent = flagContinent ~= c.Id and c.Id or nil
 					refreshEditor()
 				end },
