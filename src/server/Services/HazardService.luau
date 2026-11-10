@@ -71,7 +71,7 @@ function HazardService.trigger(dish)
 		fx(dish, "Suction", { duration = H.Suction.Duration })
 	elseif kind == "FireBurp" then
 		t.fireAt = now + H.FireBurp.Warn
-		fx(dish, "FireWarn", { seconds = H.FireBurp.Warn, from = dish.layout.zones[2].Outer })
+		fx(dish, "FireWarn", { seconds = H.FireBurp.Warn, from = (dish.layout.zones[2].Outer + dish.layout.radius) / 2 })
 	elseif kind == "Ink" then
 		placeInk(dish)
 	elseif kind == "Warp" then
@@ -105,10 +105,13 @@ function HazardService.start()
 		end
 		if t.fireAt and now >= t.fireAt then
 			t.fireAt = nil
-			dish.effects.burnFrom = dish.layout.zones[2].Outer
+			-- only the outer half of zone 1 burns: most germs here are too small for zone 2, so
+			-- burning all of zone 1 cost them about a quarter of their size with no way out
+			local from = (dish.layout.zones[2].Outer + dish.layout.radius) / 2
+			dish.effects.burnFrom = from
 			dish.effects.burnRate = H.FireBurp.DamagePerSecond
 			t.fireEnd = now + H.FireBurp.Duration
-			fx(dish, "Fire", { from = dish.layout.zones[2].Outer, duration = H.FireBurp.Duration })
+			fx(dish, "Fire", { from = from, duration = H.FireBurp.Duration })
 		end
 		if t.fireEnd and now >= t.fireEnd then
 			t.fireEnd = nil

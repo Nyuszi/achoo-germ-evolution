@@ -59,7 +59,7 @@ Config.Hosts = {
 	{
 		Name = "Ember the Dragon", Scale = 1000, SneezeSize = 2500000, Core = "Star",
 		Zones = { "Smoke Nostrils", "Fire Belly", "Gold Vault", "Flame Heart" },
-		Hazard = "FireBurp", HazardText = "Fire burp! The outer ring is burning, get inside",
+		Hazard = "FireBurp", HazardText = "Fire burp! The outer edge is burning, swim away from it",
 		Floors = { { 120, 110, 110 }, { 240, 130, 60 }, { 245, 205, 90 }, { 255, 90, 40 } },
 		Membranes = { { 80, 70, 70 }, { 255, 90, 20 }, { 255, 180, 30 }, { 255, 40, 20 } },
 		Wall = { 90, 40, 30 }, Outside = { 25, 10, 10 },

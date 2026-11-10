@@ -183,7 +183,7 @@ function Fx.event(kind, data)
 		clear("Flow")
 		groups.Flow = { disc(dish.cx, dish.cz, dish.radius, 0.9, Color3.fromRGB(200, 200, 220), 0.85, Enum.Material.Glass) }
 	elseif kind == "FireWarn" then
-		Fx.banner("🔥 FIRE BURP in " .. data.seconds .. " seconds! Get inside the " .. (dish.zones[2] and dish.zones[2].name or "middle"))
+		Fx.banner("🔥 FIRE BURP in " .. data.seconds .. " seconds! Swim away from the edge")
 		clear("Fire")
 		groups.Fire = ringParts(dish.cx, dish.cz, (data.from + dish.radius) / 2, 3, Color3.fromRGB(255, 160, 40), 0.5, 0.7)
 	elseif kind == "Fire" then
