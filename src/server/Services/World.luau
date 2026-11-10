@@ -1127,6 +1127,11 @@ local function moveCell(cell, dt)
 		sizeForZones = dish.layout.sneeze -- may go anywhere
 	end
 	local allowed = Formulas.clampDistance(dist, sizeForZones, cell.r, dish.layout, dish.wall)
+	if germ.npc then
+		-- only the wall holds an immune cell (the zone rules kept big germs, and so every NPC,
+		-- out of the outer zone: a hunting Whitey could never reach a germ there)
+		allowed = math.clamp(dist, 0, math.max(0, dish.wall - cell.r))
+	end
 	if germ.npc and germ.npc.minDist then
 		allowed = math.max(allowed, math.min(germ.npc.minDist, dish.wall - cell.r))
 	end

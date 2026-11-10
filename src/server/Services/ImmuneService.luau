@@ -44,14 +44,20 @@ function ImmuneService.spawnWhitey(dish, opts)
 	local sneeze = dish.layout.sneeze
 	local share = opts.giant and 1.1 or I.Whitey.SizeShare
 	local x, z = World.randomInZone(dish, math.min(I.Whitey.MinZone, #dish.layout.zones), 10)
+	-- a giant or hunting Whitey may leave the inner zones ("x and nil or y" always gave y, so a
+	-- hunter used to stop at the zone edge and never reach its target)
+	local maxDist = nil
+	if not opts.giant and not opts.hunt then
+		maxDist = innerLimit(dish, I.Whitey.MinZone)
+	end
 	local germ = spawnNpc(dish, "whitey", opts.giant and "Giant Whitey" or "Whitey", WHITE, sneeze * share, {
-		speed = I.Whitey.Speed,
+		speed = I.Whitey.Speed * (opts.hunt and 1.6 or 1), -- a hunter hurries
 		drain = I.Whitey.DrainPerSecond,
 		hp = sneeze * I.Whitey.HpShare * (opts.giant and 2 or 1),
 		maxHp = sneeze * I.Whitey.HpShare * (opts.giant and 2 or 1),
 		reward = I.Whitey.RewardShare,
 		hunt = opts.hunt, -- a germ to chase first (Immune Strike)
-		maxDist = (opts.giant or opts.hunt) and nil or innerLimit(dish, I.Whitey.MinZone),
+		maxDist = maxDist, -- nil = may go anywhere
 	}, x, z)
 	dish.whitey = germ
 	return germ
