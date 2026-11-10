@@ -567,6 +567,161 @@ end
 
 -- Building a look ----------------------------------------------------------------------------------------
 
+-- Body skins: what the body is made of, painted under the pattern and the face ---------------------
+-- (the 3D disc below only changes material, which hardly shows from the top-down camera)
+
+local BODIES = {}
+
+-- see-through jelly: a darker skin, a lighter middle and a few bubbles
+function BODIES.Jelly(g, color)
+	circle(g, 0.5, 0.5, 1, lerp(color, INK, 0.28))
+	circle(g, 0.5, 0.5, 0.9, color)
+	circle(g, 0.5, 0.47, 0.62, lerp(color, WHITE, 0.22), { t = 0.35 })
+	for _, b in { { 0.7, 0.68, 0.07 }, { 0.3, 0.72, 0.05 }, { 0.76, 0.36, 0.04 }, { 0.62, 0.8, 0.035 } } do
+		circle(g, b[1], b[2], b[3], WHITE, { t = 0.6 })
+	end
+end
+
+-- fuzzy: tufts of fur all round the rim and little hairs inside
+function BODIES.Fuzzy(g, color)
+	local dark, light = lerp(color, INK, 0.22), lerp(color, WHITE, 0.25)
+	for i = 0, 23 do
+		local a = math.rad(i * 15)
+		circle(g, 0.5 + math.cos(a) * 0.43, 0.5 + math.sin(a) * 0.43, 0.13, i % 2 == 0 and dark or color)
+	end
+	circle(g, 0.5, 0.5, 0.84, color)
+	for i = 0, 17 do
+		local a = math.rad(i * 20 + 7)
+		local rad = 0.2 + (i % 3) * 0.07
+		local x, y = 0.5 + math.cos(a) * rad, 0.5 + math.sin(a) * rad
+		bar(g, x, y, x + math.cos(a) * 0.045, y + math.sin(a) * 0.045, 0.018, i % 2 == 0 and light or dark)
+	end
+end
+
+-- slime: a wet rim, slow drips down the lower half and a big wet shine
+function BODIES.Slime(g, color)
+	local dark, light = lerp(color, INK, 0.35), lerp(color, WHITE, 0.4)
+	circle(g, 0.5, 0.5, 1, dark)
+	circle(g, 0.5, 0.48, 0.9, color)
+	for _, d in { { 0.24, 0.6, 0.1 }, { 0.38, 0.72, 0.13 }, { 0.55, 0.76, 0.1 }, { 0.7, 0.66, 0.14 }, { 0.82, 0.52, 0.08 } } do
+		box(g, d[1], d[2], d[3], d[3] * 1.7, dark, { t = 0.25 })
+		circle(g, d[1] - d[3] * 0.18, d[2] + d[3] * 0.45, d[3] * 0.3, light, { t = 0.3 })
+	end
+	arc(g, 0.5, 0.5, 0.36, 0.36, 200, 285, 0.045, light, { t = 0.25 })
+end
+
+-- crystal: cut facets that catch the light, and sparkles
+function BODIES.Crystal(g, color)
+	circle(g, 0.5, 0.5, 1, lerp(color, WHITE, 0.35))
+	circle(g, 0.5, 0.5, 0.86, lerp(color, WHITE, 0.12))
+	for i = 0, 7 do
+		local a = i * 45
+		local r = math.rad(a)
+		tri(g, 0.5 + math.sin(r) * 0.2, 0.5 - math.cos(r) * 0.2, 0.34, a + 180, i % 2 == 0 and WHITE or lerp(color, INK, 0.3), { t = i % 2 == 0 and 0.55 or 0.7 })
+	end
+	circle(g, 0.5, 0.5, 0.2, WHITE, { t = 0.45 })
+	for _, p in { { 0.26, 0.3 }, { 0.74, 0.62 }, { 0.36, 0.76 } } do
+		bar(g, p[1] - 0.045, p[2], p[1] + 0.045, p[2], 0.016, WHITE)
+		bar(g, p[1], p[2] - 0.045, p[1], p[2] + 0.045, 0.016, WHITE)
+	end
+end
+
+-- lava: dark rock with glowing cracks
+function BODIES.Lava(g, color)
+	local hot = lerp(color, rgb(255, 120, 20), 0.75)
+	circle(g, 0.5, 0.5, 1, hot)
+	circle(g, 0.5, 0.5, 0.93, rgb(58, 26, 22))
+	local cracks = {
+		{ 0.5, 0.5, 0.3, 0.2 }, { 0.3, 0.2, 0.18, 0.12 }, { 0.5, 0.5, 0.74, 0.3 }, { 0.74, 0.3, 0.86, 0.36 }, { 0.5, 0.5, 0.42, 0.78 },
+		{ 0.42, 0.78, 0.3, 0.86 }, { 0.5, 0.5, 0.72, 0.7 }, { 0.72, 0.7, 0.8, 0.62 }, { 0.3, 0.2, 0.34, 0.1 }, { 0.42, 0.78, 0.52, 0.9 },
+		{ 0.5, 0.5, 0.2, 0.56 }, { 0.2, 0.56, 0.12, 0.5 },
+	}
+	for _, c in cracks do
+		bar(g, c[1], c[2], c[3], c[4], 0.045, hot)
+	end
+	for _, c in cracks do
+		bar(g, c[1], c[2], c[3], c[4], 0.016, rgb(255, 235, 130))
+	end
+	circle(g, 0.5, 0.5, 0.1, rgb(255, 235, 130))
+end
+
+-- galaxy: deep space, spiral arms and stars
+function BODIES.Galaxy(g, color)
+	circle(g, 0.5, 0.5, 1, lerp(color, rgb(18, 10, 50), 0.82))
+	local arm1, arm2 = lerp(color, rgb(190, 120, 255), 0.6), lerp(color, rgb(90, 190, 255), 0.6)
+	for k = 0, 1 do
+		local px, py
+		for i = 0, 14 do
+			local t = i / 14
+			local a = math.rad(k * 180 + t * 330)
+			local rad = 0.04 + t * 0.36
+			local x, y = 0.5 + math.cos(a) * rad, 0.5 + math.sin(a) * rad
+			if px then
+				bar(g, px, py, x, y, 0.09 - t * 0.055, k == 0 and arm1 or arm2, { t = 0.25 + t * 0.4 })
+			end
+			px, py = x, y
+		end
+	end
+	circle(g, 0.5, 0.5, 0.16, rgb(255, 240, 210), { t = 0.15 })
+	for _, st in { { 0.2, 0.3, 0.03 }, { 0.78, 0.24, 0.022 }, { 0.84, 0.6, 0.03 }, { 0.3, 0.8, 0.022 }, { 0.62, 0.86, 0.018 }, { 0.14, 0.56, 0.018 }, { 0.6, 0.14, 0.02 }, { 0.4, 0.16, 0.014 } } do
+		circle(g, st[1], st[2], st[3], WHITE)
+	end
+end
+
+-- candy: a peppermint swirl
+function BODIES.Candy(g, color)
+	circle(g, 0.5, 0.5, 1, lerp(color, WHITE, 0.12))
+	for k = 0, 5 do
+		local px, py
+		for i = 0, 8 do
+			local t = i / 8
+			local a = math.rad(k * 60 + t * 75)
+			local rad = t * 0.43
+			local x, y = 0.5 + math.cos(a) * rad, 0.5 + math.sin(a) * rad
+			if px then
+				bar(g, px, py, x, y, 0.02 + t * 0.09, WHITE)
+			end
+			px, py = x, y
+		end
+	end
+	circle(g, 0.5, 0.5, 0.12, WHITE)
+	arc(g, 0.5, 0.5, 0.47, 0.47, 0, 360, 0.03, lerp(color, INK, 0.2), { n = 24 })
+end
+
+-- robot: bolted metal plates
+function BODIES.Robot(g, color)
+	local metal = lerp(color, rgb(160, 168, 182), 0.65)
+	circle(g, 0.5, 0.5, 1, lerp(metal, INK, 0.45))
+	circle(g, 0.5, 0.5, 0.92, metal, { grad = { color = shade(lerp(metal, WHITE, 0.3), lerp(metal, INK, 0.25)), rot = 90 } })
+	local line = lerp(metal, INK, 0.5)
+	bar(g, 0.14, 0.5, 0.86, 0.5, 0.014, line)
+	bar(g, 0.5, 0.1, 0.5, 0.5, 0.014, line)
+	bar(g, 0.32, 0.5, 0.32, 0.86, 0.014, line)
+	bar(g, 0.68, 0.5, 0.68, 0.86, 0.014, line)
+	for i = 0, 11 do
+		local a = math.rad(i * 30 + 15)
+		local x, y = 0.5 + math.cos(a) * 0.4, 0.5 + math.sin(a) * 0.4
+		circle(g, x, y, 0.045, line)
+		circle(g, x - 0.006, y - 0.006, 0.026, lerp(metal, WHITE, 0.5))
+	end
+	-- a warning stripe plate
+	for i = 0, 3 do
+		box(g, 0.41 + i * 0.06, 0.24, 0.03, 0.09, i % 2 == 0 and GOLD or INK, { rot = 25, corner = UDim.new(0.2, 0) })
+	end
+end
+
+-- champion: polished gold with a ring of stars
+function BODIES.Champion(g)
+	circle(g, 0.5, 0.5, 1, rgb(170, 110, 20))
+	circle(g, 0.5, 0.5, 0.93, GOLD, { grad = { color = shade(rgb(255, 240, 150), rgb(235, 160, 30)), rot = 60 } })
+	arc(g, 0.5, 0.5, 0.36, 0.36, 0, 360, 0.02, rgb(190, 125, 25), { n = 24 })
+	for i = 0, 7 do
+		local a = math.rad(i * 45 + 22.5)
+		local x, y = 0.5 + math.cos(a) * 0.42, 0.5 + math.sin(a) * 0.42
+		box(g, x, y, 0.05, 0.05, WHITE, { rot = 45, corner = UDim.new(0.15, 0) })
+	end
+end
+
 local MOUTH_SCALE = 1.45
 local HAT_SCALE = { Laurel = 1, CatEars = 1, Party = 1.15, Propeller = 1.3, Halo = 1.25 }
 
@@ -578,6 +733,10 @@ function Looks.build(root, look)
 	local color = look.color or rgb(120, 220, 120)
 	local c2 = skin.Color2 and rgb(skin.Color2[1], skin.Color2[2], skin.Color2[3]) or WHITE
 	local handles = {}
+	local body = skin.Body and BODIES[skin.Body]
+	if body and not look.flag then
+		body(group(root, "Body", 0), color)
+	end
 	local pattern = PATTERNS[skin.Pattern or "None"]
 	if pattern and not look.flag then
 		pattern(group(root, "Pattern", 1), c2, color)
