@@ -35,6 +35,7 @@ local foodAt = {} -- [foodId] = { x, y, z, d } (where each pellet is drawn)
 local latest = {} -- [cellId] = { x, z, size, flags }
 local sucking = {} -- food being sucked into a germ: { part, x, z, d, cell, t }
 local dying = {} -- cells being swallowed (or fading out): { v, eater, t, r }
+local retiring = {} -- old visuals kept while a new look is built: { model, cellId, at, seen }
 local puddles = {} -- slime left on the floor by the Slime mutation: { part, t }
 local freePuddles = {}
 local PUDDLE_TIME = 2.4
@@ -631,10 +632,11 @@ function Renderer.applyInfo(payload)
 	for key, info in payload.germs do
 		local germId = tonumber(key)
 		Renderer.germInfo[germId] = info
-		-- rebuild visuals of this germ's cells so new mutations and skins show
+		-- rebuild visuals of this germ's cells so new mutations and skins show. The old visual stays
+		-- (U2) until the new one has been drawn for a moment, so the germ never shows faceless.
 		for cellId, gid in Renderer.cellGerm do
 			if gid == germId and Renderer.cells[cellId] then
-				Renderer.cells[cellId].model:Destroy()
+				table.insert(retiring, { model = Renderer.cells[cellId].model, cellId = cellId, at = os.clock() })
 				Renderer.cells[cellId] = nil
 			end
 		end
@@ -706,6 +708,18 @@ end
 
 -- Called every frame
 function Renderer.update(dt, t)
+	-- drop an old visual once its replacement has been on screen a few frames (or after 1 s)
+	for i = #retiring, 1, -1 do
+		local r = retiring[i]
+		local now = os.clock()
+		if Renderer.cells[r.cellId] and not r.seen then
+			r.seen = now
+		end
+		if (r.seen and now - r.seen > 0.12) or now - r.at > 1 or not Renderer.cellGerm[r.cellId] then
+			r.model:Destroy()
+			table.remove(retiring, i)
+		end
+	end
 	local parts, cframes = {}, {}
 	local k = 1 - math.exp(-14 * dt)
 	for id, s in latest do

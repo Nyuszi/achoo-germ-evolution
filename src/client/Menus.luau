@@ -327,6 +327,7 @@ local PALETTE = {
 }
 local flagFilter = ""
 local flagContinent = nil
+local tryOn = nil -- { tab, cat, id, name }: an unowned item previewed on the Editor's picture
 
 local function ownsSkin(cat, id)
 	if cat == "Flag" then
@@ -387,9 +388,14 @@ local function refreshEditor()
 	if LOOK_TABS[tab] then
 		-- your germ as it looks right now
 		local top = make("Frame", { Size = UDim2.new(1, -10, 0, 128), BackgroundColor3 = Ui.ROW, LayoutOrder = nextN(), ZIndex = 12, Parent = editor.list }, { Ui.corner(10) })
-		germPicture(top, 86, profile.Skin, UDim2.new(0, 66, 0.56, 0))
-		text({ Size = UDim2.new(1, -150, 0, 30), Position = UDim2.new(0, 135, 0, 20), Text = "Your germ", ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = top })
-		text({ Size = UDim2.new(1, -150, 0, 44), Position = UDim2.new(0, 135, 0, 56), Text = "Seen from above, like in the game. Eyes follow where you swim.", TextWrapped = true, TextScaled = true, ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(215, 205, 230), Parent = top })
+		-- U10: a picked item you don't own is shown on the picture only (nothing is bought or worn)
+		if tryOn and ownsSkin(tryOn.cat, tryOn.id) then
+			tryOn = nil -- bought it: no more preview
+		end
+		local trying = tryOn and tryOn.tab == tab and tryOn or nil
+		germPicture(top, 86, trying and withItem(trying.cat, trying.id) or profile.Skin, UDim2.new(0, 66, 0.56, 0))
+		text({ Size = UDim2.new(1, -150, 0, 30), Position = UDim2.new(0, 135, 0, 20), Text = trying and ("Trying on: " .. trying.name) or "Your germ", ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = top })
+		text({ Size = UDim2.new(1, -150, 0, 44), Position = UDim2.new(0, 135, 0, 56), Text = trying and "Just a preview: buy it to wear it. Tap it again to stop." or "Seen from above, like in the game. Tap a locked item's picture to try it on.", TextWrapped = true, TextScaled = true, ZIndex = 13, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(215, 205, 230), Parent = top })
 	end
 	if tab == "Colors" then
 		for _, which in { "Color", "Color2" } do
@@ -515,6 +521,20 @@ local function refreshEditor()
 					-- hats stick out above the head, so those germs sit a bit lower and smaller
 					local hat = skin.Hat ~= nil and skin.Hat ~= "None"
 					germPicture(box, hat and 32 or 40, skin, UDim2.fromScale(0.5, hat and 0.62 or 0.5))
+					if not owned then
+						-- tap the picture to try it on (preview only)
+						local tap = make("TextButton", { Size = UDim2.fromScale(1, 1), Text = "", BackgroundTransparency = 1, ZIndex = 15, Parent = box })
+						tap.Activated:Connect(function()
+							local same = tryOn and tryOn.cat == cat and tryOn.id == item.Id
+							tryOn = not same and { tab = tab, cat = cat, id = item.Id, name = item.Name } or nil
+							local pos = editor.list.CanvasPosition
+							refreshEditor()
+							editor.list.CanvasPosition = pos
+						end)
+					end
+				end
+				if not owned and info == "" then
+					info = "tap the picture to try it on"
 				end
 			end
 			row(editor.list, nextN(), item.Name .. (on and "  ✓" or ""), info, buttons, swatch)
@@ -544,7 +564,16 @@ local function refreshShop()
 		call("Shop", "UsePotion")
 	end } })
 	heading(shop.list, nextN(), "Game passes (yours forever)")
-	for _, id in Config.GamePassOrder do
+	-- U9: passes you can still buy first, the ones you own at the end
+	local passOrder = {}
+	for _, ownedPass in { false, true } do
+		for _, id in Config.GamePassOrder do
+			if (profile.Passes[id] and true or false) == ownedPass then
+				table.insert(passOrder, id)
+			end
+		end
+	end
+	for _, id in passOrder do
 		local p = Config.GamePasses[id]
 		if p.Id ~= 0 or profile.Studio then
 			local owned = profile.Passes[id]
@@ -799,9 +828,30 @@ end
 -- the bottom left (see Main), so the bar stays in the upper part of the screen, clear of it.
 local touchOnly = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local bar = make("Frame", { Size = UDim2.new(0, 112, touchOnly and 0.64 or 0.42, 0), Position = UDim2.new(0, 10, 0.2, 0), BackgroundTransparency = 1, Parent = Ui.gui }, {
-	make("UIListLayout", { Padding = UDim.new(0, 5) }),
 	make("UISizeConstraint", { MaxSize = Vector2.new(112, 430) }),
 })
+-- U11: a short screen (a phone held sideways is about 390 px tall) would squeeze the 8 buttons
+-- to about 30 px each, too small to tap. There the bar becomes two columns of 44 px tall buttons.
+local barList = make("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, Parent = bar })
+local barGrid = nil
+local function fitBar()
+	local h = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 1000
+	local short = h > 50 and h < 620
+	if short and not barGrid then
+		barList.Parent = nil
+		barGrid = make("UIGridLayout", { CellSize = UDim2.fromOffset(54, 44), CellPadding = UDim2.fromOffset(4, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = bar })
+		bar.Size = UDim2.new(0, 112, 0, 4 * 48)
+	elseif not short and barGrid then
+		barGrid:Destroy()
+		barGrid = nil
+		barList.Parent = bar
+		bar.Size = UDim2.new(0, 112, touchOnly and 0.64 or 0.42, 0)
+	end
+end
+fitBar()
+if workspace.CurrentCamera then
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitBar)
+end
 local menuButtons = {}
 local function menuButton(name, label, color, order)
 	menuButtons[name] = button({ Size = UDim2.new(1, 0, 0.125, -5), Text = label, BackgroundColor3 = color, LayoutOrder = order, Parent = bar }, function()

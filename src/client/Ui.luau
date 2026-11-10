@@ -112,7 +112,8 @@ function Ui.panel(name, title)
 	frame.Position = UDim2.new(0.5, 0, 0.12, 0)
 	local titleLabel = Ui.text({ Size = UDim2.new(1, -110, 0, 38), Position = UDim2.new(0, 14, 0, 8), Text = title, ZIndex = 11, TextXAlignment = Enum.TextXAlignment.Left, Parent = frame })
 	local sub = Ui.text({ Size = UDim2.new(1, -28, 0, 22), Position = UDim2.new(0, 14, 0, 46), Text = "", ZIndex = 11, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(220, 200, 255), Parent = frame })
-	Ui.button({ Size = UDim2.new(0, 44, 0, 38), Position = UDim2.new(1, -54, 0, 8), Text = "X", BackgroundColor3 = Ui.BAD, ZIndex = 11, Parent = frame }, function()
+	-- the close button is 44 px square: easy to tap on a phone
+	Ui.button({ Size = UDim2.new(0, 44, 0, 44), Position = UDim2.new(1, -54, 0, 5), Text = "X", BackgroundColor3 = Ui.BAD, ZIndex = 11, Parent = frame }, function()
 		Ui.close()
 	end)
 	local tabs = make("Frame", { Size = UDim2.new(1, -28, 0, 34), Position = UDim2.new(0, 14, 0, 72), BackgroundTransparency = 1, ZIndex = 11, Parent = frame }, {
