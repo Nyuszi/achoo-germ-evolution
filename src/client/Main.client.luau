@@ -42,6 +42,7 @@ local camX, camZ, camH = 0, 0, Config.Camera.BaseHeight
 
 Fx.banner = Hud.announce
 Fx.bossHp = Hud.bossHp
+Fx.onBushes = Hud.mapBushes
 Fx.arenaTimer = Hud.arenaTimer
 Menus.notify = Hud.notify
 
@@ -111,6 +112,7 @@ Remotes.Sync.OnClientEvent:Connect(function(state)
 	alive = state.alive
 	Menus.setMode(state.mode)
 	Hud.sync(state)
+	Fx.setSize(state.size)
 end)
 Remotes.Prompt.OnClientEvent:Connect(function(kind)
 	if kind == "Favorite" then
@@ -338,6 +340,6 @@ RunService.RenderStepped:Connect(function(dt)
 	boardTimer += dt
 	if boardTimer >= 0.5 then
 		boardTimer = 0
-		Hud.board(Renderer.board(6), myGermId)
+		Hud.board(Renderer.board(200), myGermId)
 	end
 end)

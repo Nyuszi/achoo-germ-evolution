@@ -57,7 +57,7 @@ local function disc(x, z, r, y, color, transparency, material)
 	})
 end
 
-local function ringParts(cx, cz, radius, width, color, transparency, y)
+local function ringParts(cx, cz, radius, width, color, transparency, y, material)
 	local list = {}
 	local segments = 40 -- few big parts: small ones vanish first when the camera is far
 	local length = 2 * math.pi * radius / segments + 0.6
@@ -67,12 +67,72 @@ local function ringParts(cx, cz, radius, width, color, transparency, y)
 			Size = Vector3.new(length, 0.6, width),
 			CFrame = CFrame.new(cx + math.cos(a) * radius, y or 0.6, cz + math.sin(a) * radius) * CFrame.Angles(0, -a + math.pi / 2, 0),
 			Color = color,
-			Material = Enum.Material.Neon,
+			Material = material or Enum.Material.Neon,
 			Transparency = transparency or 0.3,
 		}))
 	end
 	return list
 end
+
+-- Zone gates (M2) and the Sneeze Nerve beam (M7) depend on your size: see Fx.setSize
+local gates = {} -- { { parts, min } }
+local beam = nil
+local mySize = 0
+local function paintGates()
+	for _, g in gates do
+		local open = mySize >= g.min
+		for _, p in g.parts do
+			-- a gate you may cross glows; one you are too small for stays dull
+			p.Color = open and Color3.fromRGB(140, 255, 170) or Color3.fromRGB(150, 120, 130)
+			p.Transparency = open and 0.35 or 0.7
+		end
+	end
+	if beam then
+		local ready = dish and dish.sneeze and mySize >= dish.sneeze
+		beam.Transparency = ready and 0.55 or 1
+	end
+end
+
+local function buildGates(info)
+	for _, g in gates do
+		for _, p in g.parts do
+			p:Destroy()
+		end
+	end
+	gates = {}
+	if beam then
+		beam:Destroy()
+		beam = nil
+	end
+	if info.kind ~= "host" then
+		return
+	end
+	for i = 2, #info.zones do
+		local z = info.zones[i]
+		table.insert(gates, { parts = ringParts(info.cx, info.cz, z.outer, 2, Color3.new(1, 1, 1), 0.7, 1.3), min = z.min or 0 })
+	end
+	-- a tall glowing column over the Sneeze Nerve once you are big enough to sneeze
+	beam = part({
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(160, 22, 22),
+		CFrame = CFrame.new(info.cx, 80, info.cz) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = Color3.fromRGB(255, 235, 140),
+		Material = Enum.Material.Neon,
+		Transparency = 1,
+	})
+	paintGates()
+end
+
+-- your size, from every Sync
+function Fx.setSize(size)
+	if math.abs(size - mySize) < 0.5 then
+		return
+	end
+	mySize = size
+	paintGates()
+end
+
+Fx.onBushes = function(list) end -- the HUD puts them on the minimap
 
 function Fx.setDish(info)
 	for kind in groups do
@@ -98,6 +158,7 @@ function Fx.setDish(info)
 	if Fx.fog then
 		Fx.banner("🌫️ Fog: you can only see close by")
 	end
+	buildGates(info)
 end
 
 local function setWall(target)
@@ -132,12 +193,17 @@ function Fx.event(kind, data)
 		-- thorn bushes: a leafy canopy (small germs hide under it) ringed with thorns
 		clear("Bushes")
 		groups.Bushes = {}
+		Fx.sway = {}
+		Fx.onBushes(data)
 		local leaf, light, thorn = Color3.fromRGB(45, 120, 55), Color3.fromRGB(95, 175, 80), Color3.fromRGB(70, 45, 35)
 		for _, b in data do
 			table.insert(groups.Bushes, disc(b.x, b.z, b.r, 3.6, leaf, 0.25, Enum.Material.Grass))
 			for k = 0, 2 do
 				local a = k * 2.1 + b.x * 0.01
-				table.insert(groups.Bushes, disc(b.x + math.cos(a) * b.r * 0.4, b.z + math.sin(a) * b.r * 0.4, b.r * 0.45, 3.85, light, 0.3, Enum.Material.Grass))
+				local leafPart = disc(b.x + math.cos(a) * b.r * 0.4, b.z + math.sin(a) * b.r * 0.4, b.r * 0.45, 3.85, light, 0.3, Enum.Material.Grass)
+				table.insert(groups.Bushes, leafPart)
+				-- M4: the light leaf clumps sway gently
+				table.insert(Fx.sway, { part = leafPart, base = leafPart.CFrame, amp = b.r * 0.05, phase = a + b.z * 0.01 })
 			end
 			local n = math.max(10, math.floor(b.r * 0.8))
 			for i = 1, n do
@@ -238,10 +304,27 @@ function Fx.update(dt, camHeight)
 			end
 			wall.parts = {}
 			if wall.radius < dish.radius - 1 then
-				wall.parts = ringParts(dish.cx, dish.cz, wall.radius + 6, 12, Color3.fromRGB(120, 255, 160), 0.2, 2)
+				-- M11: a flat band from the closing edge out to the real wall (the flat wall style),
+				-- with a thin bright edge so the moving line still reads
+				local width = dish.radius - wall.radius + 4
+				wall.parts = ringParts(dish.cx, dish.cz, wall.radius + width / 2, width, Color3.fromRGB(150, 215, 175), 0.1, 1.9, Enum.Material.SmoothPlastic)
+				for _, p in ringParts(dish.cx, dish.cz, wall.radius + 1, 2.5, Color3.fromRGB(200, 255, 215), 0, 2.1, Enum.Material.SmoothPlastic) do
+					table.insert(wall.parts, p)
+				end
 			end
 			wall.lastDraw = os.clock()
 		end
+	end
+	if Fx.sway then
+		local t = os.clock()
+		for _, s in Fx.sway do
+			if s.part.Parent then
+				s.part.CFrame = s.base + Vector3.new(math.sin(t * 1.3 + s.phase) * s.amp, 0, math.cos(t * 1.1 + s.phase) * s.amp)
+			end
+		end
+	end
+	if beam and beam.Transparency < 1 then
+		beam.Transparency = 0.5 + 0.15 * math.sin(os.clock() * 4)
 	end
 	if Fx.fog then
 		Lighting.FogColor = Color3.fromRGB(200, 210, 220)

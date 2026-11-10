@@ -27,6 +27,26 @@ local zoneLabel = text({ Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 
 local barBack = make("Frame", { Size = UDim2.new(1, 0, 0, 24), Position = UDim2.new(0, 0, 0, 64), BackgroundColor3 = Color3.fromRGB(40, 25, 50), BackgroundTransparency = 0.2, Parent = top }, { corner(12) })
 local barFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Color3.fromRGB(120, 230, 140), Parent = barBack }, { corner(12) })
 local barText = text({ Size = UDim2.fromScale(1, 1), Text = "", ZIndex = 2, Parent = barBack })
+-- U5: a thin "road" under the bar: your size against the sneeze size, with a tick where each zone opens
+local road = make("Frame", { Size = UDim2.new(1, -24, 0, 6), Position = UDim2.new(0, 12, 0, 91), BackgroundColor3 = Color3.fromRGB(40, 25, 50), BackgroundTransparency = 0.2, Visible = false, Parent = top }, { corner(3) })
+local roadFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Color3.fromRGB(255, 220, 90), Parent = road }, { corner(3) })
+local roadTicks = {}
+local roadSneeze = nil
+function Hud.roadTicks(info)
+	for _, t in roadTicks do
+		t:Destroy()
+	end
+	roadTicks = {}
+	roadSneeze = info.kind == "host" and info.sneeze or nil
+	road.Visible = roadSneeze ~= nil
+	if not roadSneeze then
+		return
+	end
+	for i = 2, #info.zones do
+		local share = math.clamp((info.zones[i].min or 0) / roadSneeze, 0, 1)
+		table.insert(roadTicks, make("Frame", { Size = UDim2.new(0, 2, 1, 6), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(share, 0.5), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 3, Parent = road }))
+	end
+end
 
 local dnaLabel = text({ Size = UDim2.new(0, 220, 0, 34), Position = UDim2.new(0, 10, 0, 6), Text = "🧬 0 DNA", TextXAlignment = Enum.TextXAlignment.Left, Parent = gui })
 local subLabel = text({ Size = UDim2.new(0, 260, 0, 22), Position = UDim2.new(0, 10, 0, 40), Text = "", TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(220, 200, 255), Parent = gui })
@@ -62,8 +82,17 @@ local function fadeOut(label, after)
 	end)
 end
 
+-- the same message again while it is still showing becomes "... x2" instead of flashing again
+local lastToast, lastToastAt, toastRepeat = nil, 0, 1
 function Hud.notify(message, kind)
-	toast.Text = message
+	local now = os.clock()
+	if message == lastToast and now - lastToastAt < 4 then
+		toastRepeat += 1
+	else
+		toastRepeat = 1
+	end
+	lastToast, lastToastAt = message, now
+	toast.Text = toastRepeat > 1 and (message .. "  x" .. toastRepeat) or message
 	if kind == "error" then
 		toast.TextColor3 = Color3.fromRGB(255, 140, 140)
 	elseif kind == "success" then
@@ -106,19 +135,33 @@ end
 -- Quarantine, boss health, Arena timer, potion ------------------------------------------------
 
 local quarantine = text({ Size = UDim2.new(0, 560, 0, 26), Position = UDim2.new(0.5, -280, 1, -150), Text = "", Visible = false, TextColor3 = Color3.fromRGB(150, 220, 255), Parent = gui })
-local bossFrame = make("Frame", { Size = UDim2.new(0, 320, 0, 26), Position = UDim2.new(0.5, -160, 0, 140), BackgroundColor3 = Color3.fromRGB(40, 25, 50), Visible = false, Parent = gui }, { corner(12) })
-local bossFill = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(230, 80, 120), Parent = bossFrame }, { corner(12) })
-local bossText = text({ Size = UDim2.fromScale(1, 1), Text = "", ZIndex = 2, Parent = bossFrame })
-local bossSeen = 0
+-- one bar per boss (Whitey and Macrophage Mama used to share a bar and flip), stacked downward
+local bossStack = make("Frame", { Size = UDim2.new(0, 320, 0, 90), Position = UDim2.new(0.5, -160, 0, 140), BackgroundTransparency = 1, Parent = gui }, {
+	make("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }),
+})
+local bosses = {} -- [id] = { frame, fill, label, seen }
 function Hud.bossHp(data)
+	local key = tostring(data.id or data.name)
+	local b = bosses[key]
 	if data.hp <= 0 then
-		bossFrame.Visible = false
+		if b then
+			b.frame:Destroy()
+			bosses[key] = nil
+		end
 		return
 	end
-	bossFrame.Visible = true
-	bossSeen = os.clock()
-	bossFill.Size = UDim2.fromScale(math.clamp(data.hp / data.max, 0, 1), 1)
-	bossText.Text = data.name .. "  " .. Formulas.formatNumber(data.hp) .. " / " .. Formulas.formatNumber(data.max)
+	if not b then
+		local frame = make("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundColor3 = Color3.fromRGB(40, 25, 50), LayoutOrder = tonumber(data.id) or 0, Parent = bossStack }, { corner(12) })
+		b = {
+			frame = frame,
+			fill = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(230, 80, 120), Parent = frame }, { corner(12) }),
+			label = text({ Size = UDim2.fromScale(1, 1), Text = "", ZIndex = 2, Parent = frame }),
+		}
+		bosses[key] = b
+	end
+	b.seen = os.clock()
+	b.fill.Size = UDim2.fromScale(math.clamp(data.hp / data.max, 0, 1), 1)
+	b.label.Text = data.name .. "  " .. Formulas.formatNumber(data.hp) .. " / " .. Formulas.formatNumber(data.max)
 end
 local arenaLabel = text({ Size = UDim2.new(0, 300, 0, 24), Position = UDim2.new(0.5, -150, 0, 112), Text = "", Visible = false, Parent = gui })
 function Hud.arenaTimer(data)
@@ -158,11 +201,14 @@ local reviveScale = make("UIScale", { Parent = reviveButton })
 -- (not rotated: Roblox does not clip rotated children, so a slanted shine poked out of the button)
 local reviveShine = make("Frame", { Size = UDim2.new(0, 34, 1, 0), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(-0.2, 0.5), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.45, BorderSizePixel = 0, ZIndex = 22, Parent = reviveButton })
 local deathEnds, deathShown = 0, 0
+local lastAliveSize = 0
 
 function Hud.died(eaterName, seconds, canRevive, backToFloor)
 	Ui.close() -- an open menu would cover the countdown and the Revive button
 	death.Visible = true
 	deathText.Text = "You were eaten by " .. eaterName .. "!"
+	-- the size you had (the last one synced while alive)
+	deathCountLabel.Text = lastAliveSize > 0 and ("You were size " .. Formulas.formatNumber(lastAliveSize) .. "  ·  back in") or "Back in"
 	if backToFloor then
 		deathSub.Text = "Back to Floor " .. backToFloor .. " (your checkpoint)"
 	else
@@ -198,7 +244,7 @@ local function animateDeath()
 	if reviveButton.Visible then
 		local t = now - deathShown
 		reviveScale.Scale = 1 + 0.06 * math.sin(t * 6)
-		reviveButton.Rotation = math.sin(t * 3) * 2
+		-- (no wobble: Roblox stops clipping children of a rotated button, so the shine leaked out)
 		reviveShine.Position = UDim2.fromScale(-0.2 + ((t * 0.8) % 1) * 1.6, 0.5)
 	end
 end
@@ -389,6 +435,7 @@ local map = make("Frame", { Name = "Map", Size = UDim2.fromOffset(MAP, MAP), Pos
 local mapParts = {}
 local mapDots = {}
 local mapDish = nil
+local bushDots = {}
 local function dot(color, size, z)
 	return make("Frame", { Size = UDim2.fromOffset(size, size), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = color, ZIndex = z or 3, Parent = map }, { corner(size / 2) })
 end
@@ -417,6 +464,11 @@ function Hud.mapDish(info)
 		r:Destroy()
 	end
 	mapParts = {}
+	for _, d in bushDots do
+		d:Destroy()
+	end
+	bushDots = {}
+	Hud.roadTicks(info)
 	local host = info.kind == "host" and Config.Hosts[info.host] or nil
 	local outside = rgb(info.outside, Color3.fromRGB(30, 20, 40))
 	map.BackgroundColor3 = outside:Lerp(Color3.fromRGB(20, 12, 28), 0.5)
@@ -474,6 +526,41 @@ local function mapPos(x, z)
 	return UDim2.fromScale(u, v)
 end
 
+-- U6: bumping a zone you are too small for says when it opens (at most every 6 s)
+local gateToldAt = 0
+function Hud.checkGate(x, z)
+	local s = Hud.state()
+	if not mapDish or mapDish.kind ~= "host" or not s or not s.alive or os.clock() - gateToldAt < 6 then
+		return
+	end
+	local dist = math.sqrt((x - mapDish.cx) ^ 2 + (z - mapDish.cz) ^ 2)
+	local r = Formulas.radius(s.size, mapDish.scale)
+	for i = 2, #mapDish.zones do
+		local zone = mapDish.zones[i]
+		if zone.min and s.size < zone.min and dist - zone.outer < r + 3 and dist > zone.outer then
+			gateToldAt = os.clock()
+			Hud.notify("🚧 The " .. zone.name .. " opens at size " .. Formulas.formatNumber(zone.min), "info")
+			return
+		end
+	end
+end
+
+-- U7: thorn bushes as small green dots (hiding spots)
+function Hud.mapBushes(list)
+	for _, d in bushDots do
+		d:Destroy()
+	end
+	bushDots = {}
+	if not mapDish then
+		return
+	end
+	for _, b in list do
+		local d = dot(Color3.fromRGB(90, 190, 90), math.clamp(b.r / mapDish.radius * MAP * FILL, 5, 9), 11)
+		d.Position = mapPos(b.x, b.z)
+		table.insert(bushDots, d)
+	end
+end
+
 -- Every frame: you, the king, bosses and golden food
 function Hud.map(meX, meZ, markers)
 	if not mapDish then
@@ -489,6 +576,7 @@ function Hud.map(meX, meZ, markers)
 			end
 		end
 		lastX, lastZ = meX, meZ
+		Hud.checkGate(meX, meZ)
 	end
 	for _, d in mapDots do
 		d.Visible = false
@@ -554,9 +642,27 @@ function Hud.state()
 	return state
 end
 
+-- U1: a floating "+300" / "-120" next to the size when it jumps or drops a lot at once
+local deltaLabel = text({ Size = UDim2.new(0, 160, 0, 30), Position = UDim2.new(1, -10, 0, 6), Text = "", TextTransparency = 1, TextXAlignment = Enum.TextXAlignment.Left, Parent = top })
+local function showDelta(delta)
+	deltaLabel.Text = (delta > 0 and "+" or "-") .. Formulas.formatNumber(math.abs(math.floor(delta + 0.5)))
+	deltaLabel.TextColor3 = delta > 0 and Color3.fromRGB(150, 255, 160) or Color3.fromRGB(255, 120, 120)
+	deltaLabel.Position = UDim2.new(1, -10, 0, 6)
+	TweenService:Create(deltaLabel, TweenInfo.new(1.2), { Position = UDim2.new(1, -10, 0, -18) }):Play()
+	fadeOut(deltaLabel, 0.7)
+end
+
 function Hud.sync(newState)
+	local before = state and state.alive and state.size
 	state = newState
 	local size = state.size
+	if state.alive then
+		-- a big step (5%+ at once, not slow eating): gulping a germ, a burn, a drain, a split cost
+		if before and before > 0 and math.abs(size - before) >= math.max(before * 0.05, 3) then
+			showDelta(size - before)
+		end
+		lastAliveSize = size
+	end
 	sizeLabel.Text = "Size " .. Formulas.formatNumber(size) .. (state.crowned and " 👑" or "")
 	zoneLabel.Text = state.zoneName .. " · inside " .. state.hostName
 	if state.dnaCap and state.dna >= state.dnaCap then
@@ -581,6 +687,9 @@ function Hud.sync(newState)
 		table.insert(bits, "Mutant " .. state.mutant)
 	end
 	subLabel.Text = table.concat(bits, "  ")
+	if roadSneeze then
+		roadFill.Size = UDim2.fromScale(math.clamp(size / roadSneeze, 0, 1), 1)
+	end
 	local gate = state.nextGate
 	local share = math.clamp(size / gate.size, 0, 1)
 	barFill.Size = UDim2.fromScale(share, 1)
@@ -639,16 +748,36 @@ function Hud.tick(dt)
 			b.BackgroundTransparency = ready > 0.05 and 0.5 or 0
 		end
 	end
-	if bossFrame.Visible and os.clock() - bossSeen > 3 then
-		bossFrame.Visible = false
+	for key, b in bosses do
+		if os.clock() - b.seen > 3 then
+			b.frame:Destroy()
+			bosses[key] = nil
+		end
 	end
 end
 
+-- rows: every germ in the dish, biggest first. Shows the top 6; when you are not in it, the last
+-- line is your own row with your real place (U14).
 function Hud.board(rows, myGermId)
+	local shown = {}
+	for i = 1, #boardRows do
+		shown[i] = rows[i] and { place = i, row = rows[i] } or nil
+	end
+	local mine = nil
+	for i, row in rows do
+		if row.germId == myGermId then
+			mine = i
+			break
+		end
+	end
+	if mine and mine > #boardRows then
+		shown[#boardRows] = { place = mine, row = rows[mine] }
+	end
 	for i, label in boardRows do
-		local row = rows[i]
+		local entry = shown[i]
+		local row = entry and entry.row
 		if row then
-			label.Text = i .. ". " .. row.name .. "  " .. Formulas.formatNumber(row.size)
+			label.Text = entry.place .. ". " .. row.name .. "  " .. Formulas.formatNumber(row.size)
 			label.TextColor3 = (row.germId == myGermId) and Color3.fromRGB(140, 255, 160) or INK
 		else
 			label.Text = ""

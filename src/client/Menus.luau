@@ -129,6 +129,15 @@ function refreshLab()
 		return n
 	end
 	local lim = Formulas.hostLimits(profile.Host)
+	-- U8: the first host where test(limits) holds, for "needs host N" on locked cards
+	local function hostWhere(test)
+		for h = 1, #Config.Hosts do
+			if test(Formulas.hostLimits(h)) then
+				return h
+			end
+		end
+		return nil
+	end
 	if tab == "Mutations" or tab == "Fusions" or tab == "Cores" then
 		-- your germ with everything it wears now
 		local top = make("Frame", { Size = UDim2.new(1, -10, 0, 128), BackgroundColor3 = Ui.ROW, LayoutOrder = nextN(), ZIndex = 12, Parent = lab.list }, { Ui.corner(10) })
@@ -162,8 +171,11 @@ function refreshLab()
 					local level = profile.Levels[id] or 0
 					local buttons = {}
 					if level >= lim.levelCap and level < Config.MaxMutationLevel then
-						table.insert(buttons, { "🔒 Lv" .. (level + 1), Ui.GREY, function()
-							Menus.notify("Level " .. (level + 1) .. " unlocks in a later host. Sneeze to get there!", "info")
+						local h = hostWhere(function(l)
+							return l.levelCap > level
+						end)
+						table.insert(buttons, { "🔒 Lv" .. (level + 1) .. (h and (" · host " .. h) or ""), Ui.GREY, function()
+							Menus.notify("Level " .. (level + 1) .. " unlocks in " .. (h and Config.Hosts[h].Name or "a later host") .. ". Sneeze to get there!", "info")
 						end })
 					elseif level < Config.MaxMutationLevel then
 						local cost = Formulas.mutationCost(id, level + 1)
@@ -173,9 +185,20 @@ function refreshLab()
 					end
 					if level > 0 then
 						local on = equippedIn(id)
-						table.insert(buttons, { on and "Take off" or "Equip", on and Ui.GOLD or Ui.BLUE, function()
-							call("Lab", "Equip", id)
-						end })
+						local full = not on and not profile.Equipped[slot] and used >= lim.slots
+						if full then
+							-- every slot this host allows is in use: say where the next one opens
+							local h = hostWhere(function(l)
+								return l.slots > used
+							end)
+							table.insert(buttons, { "🔒 slot" .. (h and (" · host " .. h) or ""), Ui.GREY, function()
+								Menus.notify("Take something off first, or sneeze on: " .. (h and Config.Hosts[h].Name or "a later host") .. " gives another slot", "info")
+							end })
+						else
+							table.insert(buttons, { on and "Take off" or "Equip", on and Ui.GOLD or Ui.BLUE, function()
+								call("Lab", "Equip", id)
+							end })
+						end
 					end
 					local stars = string.rep("●", level) .. string.rep("○", Config.MaxMutationLevel - level)
 					row(lab.list, nextN(), m.Name .. "  " .. stars, statText(id, level), buttons, labPicture({ [slot] = id }))
@@ -198,8 +221,11 @@ function refreshLab()
 			end
 			local owned = profile.Fusions[id]
 			local label = owned and (equippedIn(id) and "Take off" or "Equip") or "Fuse"
+			if not lim.fusions then
+				label = "🔒 host " .. Config.FusionHost -- U8: say on the card why it can't fuse yet
+			end
 			row(lab.list, nextN(), f.Name, f.Text .. "  (" .. table.concat(parts, " + ") .. ")", {
-				{ label, (owned or ready) and Ui.GOOD or Ui.GREY, function()
+				{ label, (owned or ready) and lim.fusions and Ui.GOOD or Ui.GREY, function()
 					call("Lab", owned and "Equip" or "Fuse", id)
 				end },
 			}, labPicture({ Front = id, Back = "#" .. id }))
@@ -211,7 +237,7 @@ function refreshLab()
 			local unlocked = profile.MaxHost >= c.Host or profile.Mutant > 0
 			local on = profile.Core == id
 			row(lab.list, nextN(), c.Name .. (on and "  ✓" or ""), c.Text .. (unlocked and "" or ("  🔒 reach " .. Config.Hosts[c.Host].Name)), {
-				{ on and "Equipped" or "Use", unlocked and (on and Ui.GOLD or Ui.BLUE) or Ui.GREY, function()
+				{ on and "Equipped" or (unlocked and "Use" or ("🔒 host " .. c.Host)), unlocked and (on and Ui.GOLD or Ui.BLUE) or Ui.GREY, function()
 					call("Lab", "Core", id)
 				end },
 			})
