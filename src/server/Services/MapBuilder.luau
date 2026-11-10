@@ -121,11 +121,13 @@ end
 local function decorate(parent, cx, cz, zones, zone, color)
 	local info = zones[zone]
 	local inner = zones[zone + 1] and zones[zone + 1].Outer or 0
-	local count = math.floor((info.Outer - inner) * 0.3)
+	-- outer zones: many small blobs; inner zones: fewer, bigger ones (everything in there is bigger)
+	local big = 1 + (zone - 1) * 0.7
+	local count = math.floor((info.Outer - inner) * 0.34 / big)
 	for _ = 1, count do
 		local a = math.random() * math.pi * 2
 		local d = inner + 6 + math.random() * math.max(1, info.Outer - inner - 12)
-		local r = 3 + math.random() * 9
+		local r = (3 + math.random() * 9) * big
 		part(parent, {
 			Name = "Blob",
 			Shape = Enum.PartType.Cylinder,
@@ -135,6 +137,17 @@ local function decorate(parent, cx, cz, zones, zone, color)
 		})
 	end
 end
+
+-- count shapes round the band; from/spread = how far out; size/vary = how big; block = a long
+-- box of that length instead of a disc; light = lighter than the wall instead of darker
+local WALL_STYLES = {
+	{ count = 64, from = 14, spread = 30, size = 5, vary = 4, block = 20, mix = 0.14 }, -- fur tufts (pointing outward)
+	{ count = 30, from = 26, spread = 24, size = 14, vary = 12, mix = 0.1, light = true }, -- wet gums
+	{ count = 44, from = 10, spread = 46, size = 3, vary = 2, block = 54, mix = 0.16, turn = math.pi / 2 }, -- wrinkles (along the wall)
+	{ count = 56, from = 16, spread = 22, size = 9, vary = 2, mix = 0.14, even = true }, -- scales
+	{ count = 26, from = 30, spread = 14, size = 13, vary = 6, mix = 0.12, ring = true }, -- suckers
+	{ count = 36, from = 18, spread = 26, size = 4, vary = 1, block = 26, mix = 0.35, light = true, neon = true, even = true, turn = math.pi / 2 }, -- panels
+}
 
 local function buildHost(folder, dish)
 	local host = Config.Hosts[dish.host]
@@ -154,19 +167,79 @@ local function buildHost(folder, dish)
 	local radius = dish.layout.radius
 	local wall = rgb(host.Wall)
 	flatWall(folder, cx, cz, radius, wall, Enum.Material.SmoothPlastic)
-	for i = 1, 36 do
-		local a = (i + math.random() * 0.6) / 36 * math.pi * 2
-		local d = radius + 22 + math.random() * 34
-		local r = 10 + math.random() * 14
+	-- every host's wall has its own texture, made of flat shapes on the band:
+	-- hamster fur tufts, dog gums, elephant wrinkles, dragon scales, kraken suckers, alien panels
+	local style = WALL_STYLES[dish.host] or WALL_STYLES[1]
+	for i = 1, style.count do
+		local a = (i + (style.even and 0 or math.random() * 0.6)) / style.count * math.pi * 2
+		local d = radius + style.from + (style.even and (i % 2) * style.spread or math.random() * style.spread)
+		local r = style.size + math.random() * style.vary
+		local tone = style.light and Color3.new(1, 1, 1) or Color3.new(0, 0, 0)
+		local color = wall:Lerp(tone, style.mix + math.random() * 0.1)
+		if style.block then
+			-- long shapes lying across the band (wrinkles, tufts, panels)
+			part(folder, {
+				Name = "WallLump",
+				Size = Vector3.new(style.block, 0.1, r),
+				CFrame = CFrame.new(cx + math.cos(a) * d, -0.06, cz + math.sin(a) * d) * CFrame.Angles(0, -a + (style.turn or 0), 0),
+				Color = color,
+				Material = style.neon and Enum.Material.Neon or Enum.Material.SmoothPlastic,
+			})
+		else
+			part(folder, {
+				Name = "WallLump",
+				Shape = Enum.PartType.Cylinder,
+				Size = Vector3.new(0.1, r * 2, r * 2),
+				CFrame = CFrame.new(cx + math.cos(a) * d, -0.06, cz + math.sin(a) * d) * CFrame.Angles(0, 0, math.rad(90)),
+				Color = color,
+			})
+			if style.ring then
+				-- a sucker: a lighter middle
+				part(folder, {
+					Name = "WallLump",
+					Shape = Enum.PartType.Cylinder,
+					Size = Vector3.new(0.1, r, r),
+					CFrame = CFrame.new(cx + math.cos(a) * d, -0.04, cz + math.sin(a) * d) * CFrame.Angles(0, 0, math.rad(90)),
+					Color = wall:Lerp(Color3.new(1, 1, 1), 0.3),
+				})
+			end
+		end
+	end
+	local outside = rgb(host.Outside)
+	disc(folder, cx, cz, radius + 400, -0.5, outside, "Outside")
+	-- the dark beyond the wall isn't empty: big soft shapes far out
+	for _ = 1, 26 do
+		local a = math.random() * math.pi * 2
+		local d = radius + 110 + math.random() * 250
+		local r = 14 + math.random() * 30
 		part(folder, {
-			Name = "WallLump",
+			Name = "Beyond",
 			Shape = Enum.PartType.Cylinder,
 			Size = Vector3.new(0.1, r * 2, r * 2),
-			CFrame = CFrame.new(cx + math.cos(a) * d, -0.06, cz + math.sin(a) * d) * CFrame.Angles(0, 0, math.rad(90)),
-			Color = wall:Lerp(Color3.new(0, 0, 0), 0.12 + math.random() * 0.1),
+			CFrame = CFrame.new(cx + math.cos(a) * d, -0.44, cz + math.sin(a) * d) * CFrame.Angles(0, 0, math.rad(90)),
+			Color = outside:Lerp(wall, 0.18 + math.random() * 0.2),
 		})
 	end
-	disc(folder, cx, cz, radius + 400, -0.5, rgb(host.Outside), "Outside")
+	-- a soft glow on the floor under the Sneeze Nerve so the goal shows from far away
+	local top = #zones * 0.05
+	part(folder, {
+		Name = "NerveGlow",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.1, Config.NerveRadius * 5, Config.NerveRadius * 5),
+		CFrame = CFrame.new(cx, top, cz) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = Color3.fromRGB(255, 230, 120),
+		Material = Enum.Material.Neon,
+		Transparency = 0.75,
+	})
+	part(folder, {
+		Name = "NerveGlow",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.1, Config.NerveRadius * 3.2, Config.NerveRadius * 3.2),
+		CFrame = CFrame.new(cx, top + 0.03, cz) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = Color3.fromRGB(255, 240, 160),
+		Material = Enum.Material.Neon,
+		Transparency = 0.55,
+	})
 	for i, info in zones do
 		local inner = zones[i + 1] and zones[i + 1].Outer or 0
 		local mid = (info.Outer + inner) / 2
@@ -199,10 +272,23 @@ local function buildHost(folder, dish)
 	centreTag(folder, nerve, "SNEEZE NERVE\nreach the sneeze size and touch it!", Color3.fromRGB(255, 240, 160))
 end
 
+local ARENA_TINTS = {
+	Fever = Color3.fromRGB(255, 120, 110), LowGravity = Color3.fromRGB(190, 140, 255), Fog = Color3.fromRGB(150, 155, 165),
+	SpikeField = Color3.fromRGB(255, 170, 90), TinyDish = Color3.fromRGB(140, 235, 170), GoldenRain = Color3.fromRGB(255, 220, 110),
+	Mirror = Color3.fromRGB(150, 230, 255), MagnetStorm = Color3.fromRGB(120, 150, 255), CloneParty = Color3.fromRGB(255, 160, 220),
+	GiantWhitey = Color3.fromRGB(245, 245, 255),
+}
+
 local function buildArena(folder, dish)
 	local cx, cz = dish.cx, dish.cz
 	local r = dish.layout.radius
-	disc(folder, cx, cz, r, 0, Color3.fromRGB(205, 230, 240), "Glass", Enum.Material.Glass)
+	-- the glass is tinted by the floor's first modifier, so floors don't all look the same
+	local glass = Color3.fromRGB(205, 230, 240)
+	local tint = dish.modifiers and ARENA_TINTS[dish.modifiers[1]]
+	if tint then
+		glass = glass:Lerp(tint, 0.4)
+	end
+	disc(folder, cx, cz, r, 0, glass, "Glass", Enum.Material.Glass)
 	disc(folder, cx, cz, r + 400, -0.5, Color3.fromRGB(15, 20, 35), "Outside")
 	-- grid lines like a real petri dish
 	local step = 20

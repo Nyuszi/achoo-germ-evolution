@@ -415,6 +415,19 @@ function World.germSize(germ)
 end
 
 -- The middle of all of a germ's cells, weighted by size (local coordinates).
+-- True when this cell is in or right next to a thorn bush it fits in
+function World.nearShelter(cell)
+	for _, b in cell.dish.bushes do
+		if cell.r < b.r * Config.Hideouts.FitShare then
+			local reach = b.r + 10
+			if (cell.x - b.x) ^ 2 + (cell.z - b.z) ^ 2 < reach * reach then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- Bots: if the way to the target runs into a thorn bush this germ doesn't fit in, aim beside the
 -- bush instead (players who push into one get scratched; bots would just keep pushing)
 function World.avoidBushes(germ)
@@ -500,8 +513,12 @@ end
 
 -- A spawn point for a germ of this size: a spawn bubble in zone 1, otherwise a quiet spot
 -- in the deepest zone it may enter.
-function World.spawnPoint(dish, size)
+-- wantZone: the zone to come back in when the size allows it (where you were eaten)
+function World.spawnPoint(dish, size, wantZone)
 	local zone = Formulas.deepestZone(size, dish.layout)
+	if wantZone then
+		zone = math.clamp(wantZone, Formulas.shallowestZone(size, dish.layout), zone)
+	end
 	if zone == 1 and #dish.bubbles > 0 then
 		local b = dish.bubbles[math.random(1, #dish.bubbles)]
 		local a = math.random() * math.pi * 2
@@ -623,9 +640,12 @@ function World.dash(germ)
 	if World.germSize(germ) < d.MinSize * germ.dish.scale then
 		return false
 	end
+	local cost = 0
 	for _, cell in germ.cells do
+		cost += cell.size * d.CostShare
 		cell.size -= cell.size * d.CostShare
 	end
+	germ.dashCost = cost -- half comes back if this dash ends in a kill (see eatCell)
 	local mult = germ.stats.dashMult
 	if germ.dish.effects.lowGravity then
 		mult *= 2
@@ -816,6 +836,11 @@ local function eatCell(eaterCell, preyCell)
 	})
 	World.hooks.gainDna(eater, dna)
 	eater.shieldUntil = 0 -- attacking ends your spawn shield
+	if eater.dashCost and now < eater.dashUntil + 0.5 then
+		eaterCell.size += eater.dashCost * 0.5
+		eaterCell.r = Formulas.radius(eaterCell.size, dish.scale)
+		eater.dashCost = nil
+	end
 
 	if next(victim.cells) == nil then
 		victim.alive = false
@@ -1334,7 +1359,10 @@ local function stepDish(dish, dt)
 						local d = math.max(0.01, math.sqrt(d2))
 						cell.x, cell.z = b.x + dx / d * reach, b.z + dz / d * reach
 						if not germ.npc then
-							cell.size -= cell.size * Config.Hideouts.Damage * dt
+							-- a germ that only just doesn't fit is scratched lightly, a giant badly
+							local over = math.clamp(cell.r / (b.r * Config.Hideouts.FitShare) - 1, 0, 1)
+							local H = Config.Hideouts
+							cell.size -= cell.size * (H.DamageMin + (H.Damage - H.DamageMin) * over) * dt
 							cell.hurt = true
 							cell.r = Formulas.radius(cell.size, dish.scale)
 						end
@@ -1352,12 +1380,12 @@ local function stepDish(dish, dt)
 				-- poison, burning outer ring, Arena spikes
 				if has(germ, "Poison") then
 					cell.size -= cell.size * (germ.poisonRate or 0) * dt
-					cell.hurt = true
+					cell.hurt = cell.hurt or (now * 2) % 2 < 1 -- long effects blink, they don't stay red
 				end
 				local dist = math.sqrt(cell.x * cell.x + cell.z * cell.z)
 				if dish.effects.burnFrom and dist > dish.effects.burnFrom and not World.isProtected(germ) then
 					cell.size -= cell.size * dish.effects.burnRate * dt
-					cell.hurt = true
+					cell.hurt = cell.hurt or (now * 2) % 2 < 1
 				end
 				for _, spike in dish.spikes do
 					local dx, dz = cell.x - spike.x, cell.z - spike.z

@@ -51,7 +51,7 @@ function ImmuneService.spawnWhitey(dish, opts)
 		maxDist = innerLimit(dish, I.Whitey.MinZone)
 	end
 	local germ = spawnNpc(dish, "whitey", opts.giant and "Giant Whitey" or "Whitey", WHITE, sneeze * share, {
-		speed = I.Whitey.Speed * (opts.hunt and 1.6 or 1), -- a hunter hurries
+		speed = I.Whitey.Speed * (opts.hunt and I.Whitey.HuntSpeedMult or 1), -- a hunter hurries
 		drain = I.Whitey.DrainPerSecond,
 		hp = sneeze * I.Whitey.HpShare * (opts.giant and 2 or 1),
 		maxHp = sneeze * I.Whitey.HpShare * (opts.giant and 2 or 1),

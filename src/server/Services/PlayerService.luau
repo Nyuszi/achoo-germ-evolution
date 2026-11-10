@@ -658,7 +658,9 @@ local function onGermDied(victim, eater)
 	task.delay(Config.RespawnSeconds, function()
 		if germOf[player] == victim and player.Parent and not victim.alive and victim.mode == "host" then
 			if World.dish(dish.id) then
-				DishService.enter(victim, dish, size)
+				-- back in the zone you were eaten in when your new size may be there (no long swim)
+				local x, z = World.spawnPoint(dish, size, victim.lastZone)
+				DishService.enter(victim, dish, size, x, z)
 			else
 				PlayerService.goHost(player, size)
 			end

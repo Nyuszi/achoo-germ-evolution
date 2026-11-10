@@ -233,6 +233,10 @@ local function think(germ, brain)
 						if brain.behaviour == "Bully" and germ.dish.crowned == other then
 							bonus = 0.2
 						end
+						-- prey one step from a thorn bush it fits in is about to be safe: not worth it
+						if not skip and World.nearShelter(cell) then
+							skip = true
+						end
 						if not skip and d * bonus < preyD then
 							prey, preyD = cell, d * bonus
 						end
@@ -292,7 +296,10 @@ local function think(germ, brain)
 		return
 	end
 	if now >= brain.wanderAt then
-		local x, z = World.randomInZone(germ.dish, math.random(Formulas.shallowestZone(mySize, germ.dish.layout), Formulas.deepestZone(mySize, germ.dish.layout)), 10)
+		-- mostly head for the deepest zone this size may enter: its food is worth more, and the
+		-- outer zone gets picked clean
+		local shallow, deep = Formulas.shallowestZone(mySize, germ.dish.layout), Formulas.deepestZone(mySize, germ.dish.layout)
+		local x, z = World.randomInZone(germ.dish, math.random() < 0.7 and deep or math.random(shallow, deep), 10)
 		germ.target = { x = x, z = z }
 		brain.wanderAt = now + 4 + math.random() * 4
 	end

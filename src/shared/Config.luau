@@ -18,13 +18,14 @@ Config.Zones = {
 	-- (area per germ: Heart 4.7x and Tummy 2.2x what they had at 110/220).
 	{ Outer = 600, MinShare = 0, MaxShare = 0.3, FoodValue = 1.2, FoodCount = 720 },
 	{ Outer = 480, MinShare = 0.1, FoodValue = 2.4, FoodCount = 400 },
-	{ Outer = 370, MinShare = 0.3, FoodValue = 4.5, FoodCount = 220 },
-	{ Outer = 240, MinShare = 0.6, FoodValue = 8, FoodCount = 160 },
+	{ Outer = 370, MinShare = 0.3, FoodValue = 4.5, FoodCount = 300 },
+	{ Outer = 240, MinShare = 0.6, FoodValue = 8, FoodCount = 200 },
 }
 -- Thorn bushes: hiding spots in every host. A germ smaller than FitShare of a bush's radius
 -- slips inside and can't be seen or eaten; bigger ones are pushed out and lose Damage of their
 -- size per second while they touch the thorns. Radius in studs (the same in every host).
-Config.Hideouts = { PerZone = { 5, 4, 3, 2 }, Radius = { 14, 22, 30, 38 }, FitShare = 0.55, Damage = 0.04 }
+-- Damage: 2% a second for a germ that only just doesn't fit, up to 6% for one twice the fit size.
+Config.Hideouts = { PerZone = { 5, 4, 2, 1 }, Radius = { 14, 22, 32, 40 }, FitShare = 0.55, DamageMin = 0.02, Damage = 0.06 }
 Config.NerveRadius = 13 -- the Sneeze Nerve in the middle of every host
 
 -- Hosts --------------------------------------------------------------------------------
@@ -102,7 +103,7 @@ Config.SpeedSizeExponent = 0.15
 Config.MinSpeed = 9
 Config.MaxSpeed = 34
 -- Big germs slowly shrink so nobody sits at the top forever (share of size lost per second)
-Config.DecayStartShare = 0.5 -- of SneezeSize
+Config.DecayStartShare = 0.7 -- of SneezeSize
 Config.DecayPerSecond = 0.0012
 Config.MaxSizeShare = 1.15 -- nobody grows past 115% of the sneeze size (go sneeze!)
 
@@ -238,7 +239,7 @@ Config.SkillOrder = { "Hunter", "Glutton", "Sprinter", "Dasher", "Survivor", "St
 
 -- Immune system --------------------------------------------------------------------------
 Config.Immune = {
-	Whitey = { MinZone = 2, SizeShare = 0.45, HpShare = 3, Speed = 14, RespawnSeconds = 90, DrainPerSecond = 0.06, RewardShare = 0.06 },
+	Whitey = { MinZone = 2, SizeShare = 0.45, HpShare = 3, Speed = 11, HuntSpeedMult = 2, RespawnSeconds = 90, DrainPerSecond = 0.06, RewardShare = 0.06 },
 	Macrophage = { EverySeconds = 480, FirstAfter = 150, SizeShare = 1.4, HpShare = 6, Speed = 9, DrainPerSecond = 0.1,
 		GulpEvery = 12, GulpReach = 1.4, GulpMaxShare = 0.35, RewardShare = 0.5, Lifetime = 240 },
 	PlayerDamage = 0.15, -- a touching germ deals 15% of its own size per second to a boss

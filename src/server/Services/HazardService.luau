@@ -28,10 +28,29 @@ local function worldPoints(dish, list)
 	return out
 end
 
+-- A random spot in a zone that is not on top of a thorn bush
+local function clearSpot(dish, zone, r)
+	local x, z = 0, 0
+	for _ = 1, 12 do
+		x, z = World.randomInZone(dish, zone, r)
+		local ok = true
+		for _, b in dish.bushes or {} do
+			if (b.x - x) ^ 2 + (b.z - z) ^ 2 < (b.r + r + 8) ^ 2 then
+				ok = false
+				break
+			end
+		end
+		if ok then
+			break
+		end
+	end
+	return x, z
+end
+
 local function placeInk(dish)
 	dish.ink = {}
 	for _ = 1, H.Ink.Clouds do
-		local x, z = World.randomInZone(dish, math.random(1, 3), H.Ink.CloudRadius)
+		local x, z = clearSpot(dish, math.random(1, 3), H.Ink.CloudRadius)
 		table.insert(dish.ink, { x = x, z = z, r = H.Ink.CloudRadius })
 	end
 	fx(dish, "Ink", worldPoints(dish, dish.ink))
@@ -40,7 +59,7 @@ end
 local function placeWarps(dish)
 	dish.warps = {}
 	for i = 1, H.Warp.Holes do
-		local x, z = World.randomInZone(dish, math.random(1, 3), 20)
+		local x, z = clearSpot(dish, math.random(1, 3), 20)
 		local to = i % 2 == 1 and i + 1 or i - 1
 		table.insert(dish.warps, { x = x, z = z, r = H.Warp.HoleRadius, to = to })
 	end
