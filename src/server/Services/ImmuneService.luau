@@ -65,7 +65,7 @@ end
 
 function ImmuneService.spawnMacrophage(dish)
 	local sneeze = dish.layout.sneeze
-	local x, z = World.randomInZone(dish, 1, 30)
+	local x, z = World.randomInZone(dish, math.min(2, #dish.layout.zones), 30)
 	local germ = spawnNpc(dish, "macrophage", "Macrophage Mama", Color3.fromRGB(190, 120, 230), sneeze * I.Macrophage.SizeShare, {
 		speed = I.Macrophage.Speed,
 		drain = I.Macrophage.DrainPerSecond,
@@ -73,6 +73,7 @@ function ImmuneService.spawnMacrophage(dish)
 		maxHp = sneeze * I.Macrophage.HpShare,
 		reward = I.Macrophage.RewardShare,
 		diesAt = World.now() + I.Macrophage.Lifetime,
+		maxDist = innerLimit(dish, 2), -- she leaves the outer zone (where new germs start) alone
 		nextGulp = World.now() + I.Macrophage.GulpEvery,
 	}, x, z)
 	dish.macrophage = germ
