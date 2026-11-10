@@ -135,7 +135,8 @@ end
 
 -- Death screen ----------------------------------------------------------------------------------
 
-local death = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.45, Visible = false, ZIndex = 20, Parent = gui })
+-- reaches up under the top bar too (the HUD sits below the Roblox inset, so the strip stayed bright)
+local death = make("Frame", { Size = UDim2.new(1, 0, 1, 60), Position = UDim2.fromOffset(0, -60), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.45, Visible = false, ZIndex = 20, Parent = gui })
 local deathText = text({ Size = UDim2.new(0.8, 0, 0, 56), Position = UDim2.new(0.1, 0, 0.16, 0), Text = "", ZIndex = 21, Parent = death })
 local deathCountLabel = text({ Size = UDim2.new(0.6, 0, 0, 30), Position = UDim2.new(0.2, 0, 0.16, 62), Text = "Back in", ZIndex = 21, TextColor3 = Color3.fromRGB(215, 205, 230), Parent = death })
 -- the big countdown: each second pops in large and settles
@@ -154,7 +155,8 @@ end)
 make("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(255, 240, 150), Color3.fromRGB(255, 150, 40)), Rotation = 90, Parent = reviveButton })
 local reviveScale = make("UIScale", { Parent = reviveButton })
 -- a shine that sweeps across the button
-local reviveShine = make("Frame", { Size = UDim2.new(0, 40, 2, 0), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(-0.2, 0.5), Rotation = 20, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.45, BorderSizePixel = 0, ZIndex = 22, Parent = reviveButton })
+-- (not rotated: Roblox does not clip rotated children, so a slanted shine poked out of the button)
+local reviveShine = make("Frame", { Size = UDim2.new(0, 34, 1, 0), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(-0.2, 0.5), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.45, BorderSizePixel = 0, ZIndex = 22, Parent = reviveButton })
 local deathEnds, deathShown = 0, 0
 
 function Hud.died(eaterName, seconds, canRevive, backToFloor)
