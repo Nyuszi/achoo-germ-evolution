@@ -130,6 +130,9 @@ function Ui.panel(name, title)
 	}, { make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
 	local p = { frame = frame, list = list, sub = sub, title = titleLabel, tab = nil, onOpen = nil }
 	function p.setTabs(names, onPick)
+		if p.tab == nil or not table.find(names, p.tab) then
+			p.tab = names[1] -- the first tab is what shows, so highlight it before any click
+		end
 		for _, c in tabs:GetChildren() do
 			if c:IsA("GuiObject") then
 				c:Destroy()
