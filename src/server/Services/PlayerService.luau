@@ -159,8 +159,15 @@ function PlayerService.sync(player)
 	if not germ.alive then
 		size = germ.sizeAtDeath or 0
 	end
-	local cx, cz = World.germCentre(germ)
-	local zone = Formulas.zoneAt(math.sqrt(cx * cx + cz * cz), layout)
+	local zone
+	if germ.alive and next(germ.cells) then
+		local cx, cz = World.germCentre(germ)
+		zone = Formulas.zoneAt(math.sqrt(cx * cx + cz * cz), layout)
+		germ.lastZone = zone
+	else
+		-- dead: no cells, so the centre reads as 0,0 and the label said "Heart"
+		zone = germ.lastZone or 1
+	end
 	local nextZone = Formulas.deepestZone(size, layout) + 1
 	local gate
 	if dish.kind == "host" and layout.zones[nextZone] then

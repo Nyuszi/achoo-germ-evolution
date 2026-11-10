@@ -380,7 +380,7 @@ local function refreshEditor()
 		end
 		-- free RGB picker
 		heading(editor.list, nextN(), "Any colour: type R, G, B (0-255)")
-		local box = make("TextBox", { Size = UDim2.new(1, -140, 0, 44), Text = "", PlaceholderText = "e.g. 255, 100, 30", Font = Ui.FONT, TextScaled = true, BackgroundColor3 = Color3.fromRGB(240, 235, 250), TextColor3 = Color3.fromRGB(40, 25, 50), LayoutOrder = nextN(), ZIndex = 12, ClearTextOnFocus = false, Parent = editor.list }, { Ui.corner(10) })
+		local box = make("TextBox", { Size = UDim2.new(1, -140, 0, 44), Text = "", PlaceholderText = "e.g. 255, 100, 30", Font = Ui.FONT, TextSize = 22, BackgroundColor3 = Color3.fromRGB(240, 235, 250), TextColor3 = Color3.fromRGB(40, 25, 50), LayoutOrder = nextN(), ZIndex = 12, ClearTextOnFocus = false, Parent = editor.list }, { Ui.corner(10) })
 		button({ Size = UDim2.new(0, 130, 0, 44), Text = "Use colour", BackgroundColor3 = Ui.GOOD, LayoutOrder = nextN(), ZIndex = 12, Parent = editor.list }, function()
 			local r, g, b = string.match(box.Text, "(%d+)%D+(%d+)%D+(%d+)")
 			if r then
@@ -391,12 +391,12 @@ local function refreshEditor()
 		end)
 	elseif tab == "Flag" then
 		heading(editor.list, nextN(), "195 country flags: " .. Config.FlagPrice .. " R$ each, a continent " .. Config.ContinentPackPrice .. " R$, the whole world " .. Config.WorldPackPrice .. " R$")
-		local search = make("TextBox", { Size = UDim2.new(1, -10, 0, 40), Text = flagFilter, PlaceholderText = "Search a country...", Font = Ui.FONT, TextScaled = true, BackgroundColor3 = Color3.fromRGB(240, 235, 250), TextColor3 = Color3.fromRGB(40, 25, 50), LayoutOrder = nextN(), ZIndex = 12, ClearTextOnFocus = false, Parent = editor.list }, { Ui.corner(10) })
+		local search = make("TextBox", { Size = UDim2.new(1, -10, 0, 40), Text = flagFilter, PlaceholderText = "Search a country...", Font = Ui.FONT, TextSize = 22, BackgroundColor3 = Color3.fromRGB(240, 235, 250), TextColor3 = Color3.fromRGB(40, 25, 50), LayoutOrder = nextN(), ZIndex = 12, ClearTextOnFocus = false, Parent = editor.list }, { Ui.corner(10) })
 		search.FocusLost:Connect(function()
 			flagFilter = search.Text
 			refreshEditor()
 		end)
-		row(editor.list, nextN(), "No flag", profile.Skin.Flag == "" and "✓ on" or "", { { "Use", Ui.BLUE, function()
+		row(editor.list, nextN(), "No flag", profile.Skin.Flag == "" and "✓ on" or "", { { profile.Skin.Flag == "" and "On" or "Use", profile.Skin.Flag == "" and Ui.GOLD or Ui.BLUE, function()
 			call("Editor", "Equip", "Flag", "")
 		end } }, "🏳️")
 		local allFlags = ownsFlags(nil)

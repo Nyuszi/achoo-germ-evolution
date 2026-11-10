@@ -156,6 +156,7 @@ local reviveShine = make("Frame", { Size = UDim2.new(0, 40, 2, 0), AnchorPoint =
 local deathEnds, deathShown = 0, 0
 
 function Hud.died(eaterName, seconds, canRevive, backToFloor)
+	Ui.close() -- an open menu would cover the countdown and the Revive button
 	death.Visible = true
 	deathText.Text = "You were eaten by " .. eaterName .. "!"
 	if backToFloor then
