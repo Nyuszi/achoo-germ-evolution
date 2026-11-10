@@ -1431,7 +1431,10 @@ local function stepDish(dish, dt)
 		if not germ.npc then
 			local cap = layout.sneeze * Config.MaxSizeShare
 			if germ.bot and not germ.bot.uncapped then
-				cap = layout.sneeze * Config.Bots.MaxSizeShare
+				-- each bot tops out somewhere between 70% and 100% of the bot cap, so a full
+				-- leaderboard isn't a row of identical sizes
+				germ.bot.capShare = germ.bot.capShare or (0.7 + math.random() * 0.3)
+				cap = layout.sneeze * Config.Bots.MaxSizeShare * germ.bot.capShare
 			end
 			local size = World.germSize(germ)
 			if size > cap then
